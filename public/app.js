@@ -128,10 +128,16 @@ async function loadPredictions() {
 function renderPrediction(p) {
   const catClass = `cat-${p.category}`;
   const catLabels = {
-    sport: '⚽ Sport',
+    football: '⚽ Football',
+    nba: '🏀 NBA',
+    combat: '🥊 Combat',
+    f1: '🏎️ F1',
     crypto: '₿ Crypto',
-    entertainment: '🎵 Culture',
-    tech: '📱 Tech',
+    musique: '🎵 Musique',
+    gaming: '🎮 Gaming',
+    cinema: '🎬 Cinema',
+    drama: '👀 Drama',
+    trending: '🔥 Trending',
     general: '🔮 General'
   };
 

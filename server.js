@@ -3,6 +3,7 @@ const express = require('express');
 const path = require('path');
 const TelegramBot = require('node-telegram-bot-api');
 const db = require('./db');
+const { startScheduler, generateDailyPredictions } = require('./predictions-engine');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -158,64 +159,20 @@ app.post('/api/predictions', (req, res) => {
   res.json(prediction);
 });
 
-// --- Seed some initial predictions ---
-function seedPredictions() {
+// Force regenerate predictions (admin)
+app.post('/api/generate', async (req, res) => {
+  const count = await generateDailyPredictions();
+  res.json({ success: true, generated: count });
+});
+
+// --- Auto-generate predictions on startup ---
+async function initPredictions() {
   const existing = db.getActivePredictions();
-  if (existing.length > 0) return;
-
-  const seeds = [
-    {
-      question: 'Champions League : PSG va-t-il se qualifier pour les demi-finales ?',
-      category: 'sport',
-      optionA: 'OUI',
-      optionB: 'NON',
-      emoji: '⚽',
-      expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
-    },
-    {
-      question: 'Bitcoin au-dessus de $90,000 ce weekend ?',
-      category: 'crypto',
-      optionA: 'OUI',
-      optionB: 'NON',
-      emoji: '₿',
-      expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString()
-    },
-    {
-      question: 'Qui aura le plus de streams cette semaine ?',
-      category: 'entertainment',
-      optionA: 'Drake',
-      optionB: 'Kendrick',
-      emoji: '🎵',
-      expiresAt: new Date(Date.now() + 96 * 60 * 60 * 1000).toISOString()
-    },
-    {
-      question: 'Ethereum va dépasser $4,000 avant avril ?',
-      category: 'crypto',
-      optionA: 'OUI',
-      optionB: 'NON',
-      emoji: '💎',
-      expiresAt: new Date(Date.now() + 168 * 60 * 60 * 1000).toISOString()
-    },
-    {
-      question: 'Real Madrid va gagner le Clasico ?',
-      category: 'sport',
-      optionA: 'OUI',
-      optionB: 'NON',
-      emoji: '🏆',
-      expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
-    },
-    {
-      question: 'Le prochain iPhone aura un écran pliable ?',
-      category: 'tech',
-      optionA: 'OUI',
-      optionB: 'NON',
-      emoji: '📱',
-      expiresAt: new Date(Date.now() + 336 * 60 * 60 * 1000).toISOString()
-    }
-  ];
-
-  seeds.forEach(s => db.addPrediction(s));
-  console.log(`Seeded ${seeds.length} predictions`);
+  if (existing.length < 5) {
+    console.log('📡 Generating initial predictions...');
+    await generateDailyPredictions();
+  }
+  startScheduler();
 }
 
 // --- Telegram Bot Commands ---
@@ -299,10 +256,9 @@ bot.on('callback_query', async (query) => {
 });
 
 // --- Start ---
-seedPredictions();
-
 app.listen(PORT, () => {
   console.log(`\n👑 PREDICT KING server running on port ${PORT}`);
   console.log(`📱 Mini App URL: ${APP_URL}`);
   console.log(`🤖 Bot: @PredictKingAppBot\n`);
+  initPredictions();
 });
