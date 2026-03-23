@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Predict King</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <span class="crown">👑</span>
+        <h1>PREDICT<span class="gold">KING</span></h1>
+      </div>
+      <div class="header-right">
+        <div class="streak-badge" id="streakBadge">
+          <span class="fire">🔥</span>
+          <span id="streakCount">0</span>
+        </div>
+        <div class="points-badge" id="pointsBadge">
+          <span>⭐</span>
+          <span id="pointsCount">0</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="tab-bar">
+      <button class="tab active" data-tab="predictions">
+        <span class="tab-icon">🔮</span>
+        <span class="tab-label">Predictions</span>
+      </button>
+      <button class="tab" data-tab="leaderboard">
+        <span class="tab-icon">🏆</span>
+        <span class="tab-label">Classement</span>
+      </button>
+      <button class="tab" data-tab="profile">
+        <span class="tab-icon">👤</span>
+        <span class="tab-label">Profil</span>
+      </button>
+      <button class="tab" data-tab="invite">
+        <span class="tab-icon">👥</span>
+        <span class="tab-label">Inviter</span>
+      </button>
+    </nav>
+
+    <!-- Predictions Screen -->
+    <main class="screen active" id="screen-predictions">
+      <div class="category-filter">
+        <button class="cat-btn active" data-cat="all">Tout</button>
+        <button class="cat-btn" data-cat="sport">⚽ Sport</button>
+        <button class="cat-btn" data-cat="crypto">₿ Crypto</button>
+        <button class="cat-btn" data-cat="entertainment">🎵 Culture</button>
+        <button class="cat-btn" data-cat="tech">📱 Tech</button>
+      </div>
+      <div id="predictionsList" class="predictions-list">
+        <div class="loading">
+          <div class="spinner"></div>
+          <p>Chargement des predictions...</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- Leaderboard Screen -->
+    <main class="screen" id="screen-leaderboard">
+      <div class="screen-title">
+        <h2>🏆 Classement mondial</h2>
+        <p class="subtitle">Les meilleurs predicteurs</p>
+      </div>
+      <div id="leaderboardList" class="leaderboard-list"></div>
+    </main>
+
+    <!-- Profile Screen -->
+    <main class="screen" id="screen-profile">
+      <div class="profile-card">
+        <div class="profile-avatar" id="profileAvatar">👑</div>
+        <h2 id="profileName">Player</h2>
+        <div class="profile-rank" id="profileRank">Debutant</div>
+        <div class="profile-stats">
+          <div class="stat">
+            <span class="stat-value" id="statPoints">0</span>
+            <span class="stat-label">Points</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value" id="statStreak">0</span>
+            <span class="stat-label">Streak</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value" id="statBestStreak">0</span>
+            <span class="stat-label">Best</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value" id="statAccuracy">0%</span>
+            <span class="stat-label">Precision</span>
+          </div>
+        </div>
+        <div class="profile-details">
+          <div class="detail-row">
+            <span>Total predictions</span>
+            <span id="statTotal">0</span>
+          </div>
+          <div class="detail-row">
+            <span>Predictions correctes</span>
+            <span id="statCorrect">0</span>
+          </div>
+          <div class="detail-row">
+            <span>Amis invites</span>
+            <span id="statReferrals">0</span>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Invite Screen -->
+    <main class="screen" id="screen-invite">
+      <div class="invite-card">
+        <div class="invite-icon">🎁</div>
+        <h2>Invite tes amis !</h2>
+        <p class="invite-reward">Gagne <span class="gold">+50 points</span> par ami</p>
+        <div class="invite-visual">
+          <div class="invite-step">
+            <span>1</span>
+            <p>Partage ton lien</p>
+          </div>
+          <div class="invite-arrow">→</div>
+          <div class="invite-step">
+            <span>2</span>
+            <p>Ton ami rejoint</p>
+          </div>
+          <div class="invite-arrow">→</div>
+          <div class="invite-step">
+            <span>3</span>
+            <p>+50 points !</p>
+          </div>
+        </div>
+        <button class="btn-invite" id="btnInvite">
+          📤 Partager le lien
+        </button>
+        <div class="referral-stats">
+          <p>Amis invites : <span class="gold" id="inviteCount">0</span></p>
+          <p>Points gagnes : <span class="gold" id="invitePoints">0</span></p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
