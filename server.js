@@ -368,17 +368,17 @@ bot.onText(/\/start(.*)/, async (msg, match) => {
   }
 
   bot.sendMessage(chatId,
-    `*PREDICT KING*\n\nWelcome ${msg.from.first_name}!\n\nMake predictions on sports, crypto, pop culture...\nEarn points and climb the leaderboard\nKeep your streak for bonus points\nInvite friends for bonus points\n\nTap below to play!`,
+    `*PREDICT KING*\n\nHey ${msg.from.first_name}! Think you can predict the future?\n\n*How it works:*\nVote on real predictions (sports, crypto, music, politics...)\nGet it right = earn points + build your streak\nClimb the global leaderboard\n\n*17 categories* with live data:\nFootball | NBA | UFC | F1 | Crypto | Music | Gaming | Drama | Politics & more\n\n*Bonuses:*\nDaily login = free points\nInvite a friend = +50 pts\nWatch an ad = +5 pts\n\nNew predictions drop every 8 hours. Results auto-resolved.\n\nAre you the Predict King? Prove it.`,
     {
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [[
-          { text: 'Play', web_app: { url: APP_URL } }
+          { text: 'Play Now', web_app: { url: APP_URL } }
         ], [
           { text: 'My Profile', callback_data: 'profile' },
           { text: 'Leaderboard', callback_data: 'leaderboard' }
         ], [
-          { text: 'Invite a friend', callback_data: 'invite' }
+          { text: 'Invite a friend (+50 pts)', callback_data: 'invite' }
         ]]
       }
     }
