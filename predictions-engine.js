@@ -446,81 +446,158 @@ async function generateRugbyPredictions() {
   return pickRandom(predictions, 1);
 }
 
-// --- MUSIC ---
-function generateMusiquePredictions() {
-  const pools = [
+// --- MUSIC (LIVE NEWS + FALLBACK) ---
+async function generateMusiquePredictions() {
+  const predictions = [];
+
+  try {
+    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=entertainment&q=music%20OR%20album%20OR%20rapper%20OR%20singer%20OR%20concert%20OR%20spotify%20OR%20Grammy`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.results && data.results.length > 0) {
+      for (const article of data.results.slice(0, 4)) {
+        if (article.title && article.title.length > 15) {
+          predictions.push({
+            question: `${article.title.slice(0, 80)} — Big deal or nah?`,
+            optionA: 'Huge', optionB: 'Overhyped',
+            category: 'musique', emoji: '🎵', expiresAt: expires(72)
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Music News error:', e.message);
+  }
+
+  // Always add some curated templates too
+  const fallbacks = [
     { question: 'Who gets more streams this week?', optionA: 'Drake', optionB: 'Kendrick Lamar' },
-    { question: 'Travis Scott dropping a new album this year?', optionA: 'YES', optionB: 'NO' },
     { question: 'Biggest artist in the world right now?', optionA: 'Taylor Swift', optionB: 'The Weeknd' },
-    { question: 'A song hitting 1 billion Spotify streams this month?', optionA: 'YES', optionB: 'NO' },
     { question: 'Best rapper alive?', optionA: 'Kendrick', optionB: 'J. Cole' },
     { question: 'Next #1 on Billboard: rap or pop?', optionA: 'Rap', optionB: 'Pop' },
-    { question: 'BTS member solo album outselling group album?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Beyonce dropping a new album before summer?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Central Cee becoming the biggest UK rapper ever?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Bad Bunny or Drake: more monthly Spotify listeners?', optionA: 'Bad Bunny', optionB: 'Drake' },
-    { question: 'Biggest tour of 2026?', optionA: 'Taylor Swift', optionB: 'The Weeknd' },
-    { question: 'A K-pop group outselling every Western artist this year?', optionA: 'YES', optionB: 'NO' },
+    { question: 'Bad Bunny or Drake: more monthly listeners?', optionA: 'Bad Bunny', optionB: 'Drake' },
     { question: 'SZA or Doja Cat: who runs R&B?', optionA: 'SZA', optionB: 'Doja Cat' },
     { question: 'Will AI-generated music hit #1 on charts in 2026?', optionA: 'YES', optionB: 'NO' },
+    { question: 'A K-pop group outselling every Western artist this year?', optionA: 'YES', optionB: 'NO' },
   ];
-  return pickRandom(pools.map(p => ({ ...p, category: 'musique', emoji: '🎵', expiresAt: expires(96) })), 2);
+  predictions.push(...fallbacks.map(p => ({ ...p, category: 'musique', emoji: '🎵', expiresAt: expires(96) })));
+
+  return pickRandom(predictions, 2);
 }
 
-// --- GAMING ---
-function generateGamingPredictions() {
-  const pools = [
+// --- GAMING (LIVE NEWS + FALLBACK) ---
+async function generateGamingPredictions() {
+  const predictions = [];
+
+  try {
+    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=technology&q=gaming%20OR%20playstation%20OR%20xbox%20OR%20nintendo%20OR%20esports%20OR%20GTA%20OR%20fortnite`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.results && data.results.length > 0) {
+      for (const article of data.results.slice(0, 3)) {
+        if (article.title && article.title.length > 15) {
+          predictions.push({
+            question: `${article.title.slice(0, 80)} — W or L for gamers?`,
+            optionA: 'W', optionB: 'L',
+            category: 'gaming', emoji: '🎮', expiresAt: expires(72)
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Gaming News error:', e.message);
+  }
+
+  const fallbacks = [
     { question: 'GTA 6 releasing on time?', optionA: 'On time', optionB: 'Delayed' },
     { question: 'Best-selling game of 2026?', optionA: 'GTA 6', optionB: 'Something else' },
     { question: 'PS5 Pro outselling Xbox?', optionA: 'PS5 Pro', optionB: 'Xbox' },
-    { question: 'Fortnite dropping an event bigger than Travis Scott concert?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Nintendo announcing a new console?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Next Call of Duty being the best in the franchise?', optionA: 'YES', optionB: 'NO' },
     { question: 'EA FC 26 better than 25?', optionA: 'Better', optionB: 'Worse' },
-    { question: 'A free-to-play game breaking a player count record this month?', optionA: 'YES', optionB: 'NO' },
     { question: 'PC or Console: better for gaming in 2026?', optionA: 'PC', optionB: 'Console' },
-    { question: 'Minecraft still the most played game in the world?', optionA: 'YES', optionB: 'NO' },
     { question: 'VR gaming going mainstream this year?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Elden Ring DLC: Game of the Year material?', optionA: 'GOTY', optionB: 'Overrated' },
   ];
-  return pickRandom(pools.map(p => ({ ...p, category: 'gaming', emoji: '🎮', expiresAt: expires(96) })), 1);
+  predictions.push(...fallbacks.map(p => ({ ...p, category: 'gaming', emoji: '🎮', expiresAt: expires(96) })));
+
+  return pickRandom(predictions, 1);
 }
 
-// --- CINEMA & SERIES ---
-function generateCinemaPredictions() {
-  const pools = [
+// --- CINEMA & SERIES (LIVE NEWS + FALLBACK) ---
+async function generateCinemaPredictions() {
+  const predictions = [];
+
+  try {
+    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=entertainment&q=movie%20OR%20Netflix%20OR%20Disney%20OR%20Marvel%20OR%20series%20OR%20box%20office%20OR%20streaming`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.results && data.results.length > 0) {
+      for (const article of data.results.slice(0, 3)) {
+        if (article.title && article.title.length > 15) {
+          predictions.push({
+            question: `${article.title.slice(0, 80)} — Hit or flop?`,
+            optionA: 'Hit', optionB: 'Flop',
+            category: 'cinema', emoji: '🎬', expiresAt: expires(72)
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Cinema News error:', e.message);
+  }
+
+  const fallbacks = [
     { question: 'Next Marvel movie crossing $1 billion box office?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Marvel or DC: better movie in 2026?', optionA: 'Marvel', optionB: 'DC' },
-    { question: 'Squid Game S3 beating S1 viewership records?', optionA: 'YES', optionB: 'NO' },
     { question: 'Netflix or Disney+: more hits this year?', optionA: 'Netflix', optionB: 'Disney+' },
     { question: 'An anime becoming the #1 movie worldwide this month?', optionA: 'YES', optionB: 'NO' },
     { question: 'Best streaming platform in 2026?', optionA: 'Netflix', optionB: 'YouTube' },
-    { question: 'A horror movie grossing $500M+ this year?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Avatar 3 beating Avatar 2 box office?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Stranger Things finale: satisfying or disappointing?', optionA: 'Fire', optionB: 'Trash' },
-    { question: 'Biggest movie flop of 2026 will be from which studio?', optionA: 'Disney', optionB: 'Warner Bros' },
+    { question: 'Squid Game S3 beating S1 viewership records?', optionA: 'YES', optionB: 'NO' },
   ];
-  return pickRandom(pools.map(p => ({ ...p, category: 'cinema', emoji: '🎬', expiresAt: expires(96) })), 1);
+  predictions.push(...fallbacks.map(p => ({ ...p, category: 'cinema', emoji: '🎬', expiresAt: expires(96) })));
+
+  return pickRandom(predictions, 1);
 }
 
-// --- DRAMA & BUZZ ---
-function generateDramaPredictions() {
-  const pools = [
+// --- DRAMA & BUZZ (LIVE NEWS + FALLBACK) ---
+async function generateDramaPredictions() {
+  const predictions = [];
+
+  try {
+    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=technology&q=AI%20OR%20Elon%20Musk%20OR%20Apple%20OR%20TikTok%20OR%20YouTube%20OR%20viral%20OR%20influencer`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.results && data.results.length > 0) {
+      for (const article of data.results.slice(0, 3)) {
+        if (article.title && article.title.length > 15) {
+          predictions.push({
+            question: `${article.title.slice(0, 80)} — Will people care in a week?`,
+            optionA: 'YES', optionB: 'Already forgot',
+            category: 'drama', emoji: '👀', expiresAt: expires(48)
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Drama News error:', e.message);
+  }
+
+  const fallbacks = [
     { question: 'Elon Musk causing another controversy this week?', optionA: 'YES (obviously)', optionB: 'NO (miracle)' },
-    { question: 'IShowSpeed hitting 50M YouTube subscribers?', optionA: 'YES', optionB: 'NO' },
     { question: 'MrBeast dropping a 200M+ views video this month?', optionA: 'YES', optionB: 'NO' },
-    { question: 'A major YouTuber getting cancelled this week?', optionA: 'YES', optionB: 'NO' },
     { question: 'AI replacing a major job category by end of 2026?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Apple announcing a revolutionary product in 2026?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Next global viral moment: positive or negative?', optionA: 'Positive', optionB: 'Negative' },
-    { question: 'A billionaire going to space again this year?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Twitter/X still relevant in 2026?', optionA: 'YES', optionB: 'NO' },
-    { question: 'An influencer running for political office this year?', optionA: 'YES', optionB: 'NO' },
     { question: 'TikTok getting banned in another country?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Biggest tech layoff of 2026 coming from?', optionA: 'Google', optionB: 'Meta' },
+    { question: 'Twitter/X still relevant in 2026?', optionA: 'YES', optionB: 'NO' },
     { question: 'Sam Altman making a shocking announcement this month?', optionA: 'YES', optionB: 'NO' },
   ];
-  return pickRandom(pools.map(p => ({ ...p, category: 'drama', emoji: '👀', expiresAt: expires(72) })), 1);
+  predictions.push(...fallbacks.map(p => ({ ...p, category: 'drama', emoji: '👀', expiresAt: expires(72) })));
+
+  return pickRandom(predictions, 1);
 }
 
 // --- NEWS-BASED PREDICTIONS ---
