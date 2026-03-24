@@ -258,10 +258,53 @@ async function vote(predictionId, choice) {
     results.querySelector('.result-bar-a').style.width = data.percentA + '%';
     results.querySelector('.result-bar-b').style.width = data.percentB + '%';
 
+    const optionAText = btnA.textContent.trim();
+    const optionBText = btnB.textContent.trim();
+
     const labels = results.querySelectorAll('.result-labels span');
-    labels[0].textContent = btnA.textContent.trim() + ' ' + data.percentA + '%';
-    labels[1].textContent = data.percentB + '% ' + btnB.textContent.trim();
+    labels[0].textContent = optionAText + ' ' + data.percentA + '%';
+    labels[1].textContent = data.percentB + '% ' + optionBText;
     results.querySelector('.total-votes').textContent = data.totalVotes + ' votes';
+
+    // Inject share button
+    const choiceLabel = choice === 'A' ? optionAText : optionBText;
+    const choicePercent = choice === 'A' ? data.percentA : data.percentB;
+    const question = card.querySelector('.prediction-question').textContent;
+
+    if (!results.querySelector('.share-btn')) {
+      const shareBtn = document.createElement('button');
+      shareBtn.className = 'share-btn';
+      shareBtn.dataset.question = encodeURIComponent(question);
+      shareBtn.dataset.choice = choiceLabel;
+      shareBtn.dataset.percent = choicePercent;
+      shareBtn.textContent = 'Share my prediction';
+      results.appendChild(shareBtn);
+    }
+
+    // Inject comments section
+    if (!card.querySelector('.comments-section')) {
+      const commentsHTML = document.createElement('div');
+      commentsHTML.className = 'comments-section';
+      commentsHTML.dataset.prediction = predictionId;
+      commentsHTML.innerHTML = `
+        <button class="comments-toggle" data-prediction="${predictionId}">
+          <span>Comments</span>
+          <span class="comments-count" id="count-${predictionId}"></span>
+        </button>
+        <div class="comments-body" id="comments-${predictionId}" style="display:none">
+          <div class="comment-input-row">
+            <input type="text" class="comment-input" id="input-${predictionId}" placeholder="Drop your take..." maxlength="280">
+            <button class="comment-send" data-prediction="${predictionId}">Send</button>
+          </div>
+          <div class="comments-list" id="list-${predictionId}"></div>
+        </div>
+      `;
+      card.appendChild(commentsHTML);
+    }
+
+    // Remove vote teaser
+    const teaser = card.querySelector('.vote-teaser');
+    if (teaser) teaser.remove();
 
     // Remove just-voted animation
     setTimeout(() => {
@@ -283,8 +326,9 @@ async function vote(predictionId, choice) {
     btnA.replaceWith(btnA.cloneNode(true));
     btnB.replaceWith(btnB.cloneNode(true));
 
-    // Attach share listeners
+    // Attach share + comment listeners
     attachShareListeners();
+    attachCommentListeners();
 
   } catch (e) {
     console.error('Vote failed:', e);
