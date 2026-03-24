@@ -76,6 +76,7 @@ function setupTabs() {
       screen.classList.add('active');
 
       if (tab.dataset.tab === 'leaderboard') loadLeaderboard();
+      if (tab.dataset.tab === 'history') loadHistory();
       if (tab.dataset.tab === 'profile') loadProfile();
       if (tab.dataset.tab === 'invite') loadInvite();
 
@@ -153,14 +154,18 @@ function renderPrediction(p) {
   const timeLeft = getTimeLeft(p.expiresAt);
   const hasVoted = p.userVote !== null;
 
+  const isHot = p.totalVotes >= 10;
+  const voteTeaser = !hasVoted && p.totalVotes > 0 ? `<p class="vote-teaser">${p.totalVotes} people already voted</p>` : '';
+
   return `
-    <div class="prediction-card" data-id="${p.id}">
+    <div class="prediction-card" data-id="${p.id}" data-expires="${p.expiresAt}">
       <div class="prediction-header">
-        <span class="prediction-category ${catClass}">${catLabels[p.category] || catLabels.general}</span>
-        <span class="prediction-timer">⏰ ${timeLeft}</span>
+        <span class="prediction-category ${catClass}">${catLabels[p.category] || catLabels.general}${isHot ? '<span class="hot-badge">HOT</span>' : ''}</span>
+        <span class="prediction-timer">${timeLeft}</span>
       </div>
       <span class="prediction-emoji">${p.emoji}</span>
       <p class="prediction-question">${p.question}</p>
+      ${voteTeaser}
       <div class="vote-buttons">
         <button class="vote-btn option-a ${hasVoted ? 'voted' : ''} ${hasVoted && p.userVote === 'A' ? 'selected-a' : ''} ${hasVoted && p.userVote !== 'A' ? 'not-selected' : ''}"
                 data-prediction="${p.id}" data-choice="A">
@@ -262,10 +267,17 @@ async function vote(predictionId, choice) {
     setTimeout(() => {
       btnA.classList.remove('just-voted');
       btnB.classList.remove('just-voted');
-    }, 400);
+    }, 600);
 
     // Update user stats
     currentUser.totalPredictions = (currentUser.totalPredictions || 0) + 1;
+
+    // Milestone celebrations
+    const total = currentUser.totalPredictions;
+    if (total === 10 || total === 50 || total === 100 || total % 100 === 0) {
+      launchConfetti();
+      if (tg) tg.HapticFeedback?.notificationOccurred('success');
+    }
 
     // Remove click listeners from voted buttons
     btnA.replaceWith(btnA.cloneNode(true));
@@ -345,13 +357,14 @@ function showDailyPopup(bonus, streak) {
       <div class="daily-emoji">🎁</div>
       <h3>Daily Bonus!</h3>
       <p class="daily-points">+${bonus} points</p>
-      <p class="daily-streak">🔥 Streak: ${streak} day${streak > 1 ? 's' : ''}</p>
+      <p class="daily-streak">Streak: ${streak} day${streak > 1 ? 's' : ''}</p>
       <p class="daily-tip">Come back tomorrow for even more!</p>
       <button class="daily-close" onclick="this.parentElement.parentElement.remove()">Let's go!</button>
     </div>
   `;
   document.getElementById('app').appendChild(popup);
 
+  launchConfetti();
   if (tg) tg.HapticFeedback?.notificationOccurred('success');
 }
 
@@ -424,6 +437,68 @@ function getRank(points) {
   if (points >= 500) return '🥈 Silver';
   if (points >= 100) return '🥉 Bronze';
   return '🆕 Rookie';
+}
+
+// --- History ---
+async function loadHistory() {
+  if (!currentUser?.id) return;
+
+  const list = document.getElementById('historyList');
+  const stats = document.getElementById('historyStats');
+  list.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  try {
+    const res = await fetch(`/api/history/${currentUser.id}`);
+    const history = await res.json();
+
+    if (history.length === 0) {
+      stats.innerHTML = '';
+      list.innerHTML = '<div class="empty-state"><div class="emoji">📋</div><p>No predictions yet. Go vote!</p></div>';
+      return;
+    }
+
+    const wins = history.filter(h => h.won === true).length;
+    const losses = history.filter(h => h.won === false).length;
+    const pending = history.filter(h => h.won === null).length;
+
+    stats.innerHTML = `
+      <div class="history-stat-row">
+        <div class="history-stat won"><span>${wins}</span><label>Won</label></div>
+        <div class="history-stat lost"><span>${losses}</span><label>Lost</label></div>
+        <div class="history-stat pending"><span>${pending}</span><label>Pending</label></div>
+      </div>
+    `;
+
+    list.innerHTML = history.map(h => {
+      const choiceLabel = h.userChoice === 'A' ? h.optionA : h.optionB;
+      let statusClass = 'pending';
+      let statusIcon = '...';
+      let statusText = 'Pending';
+
+      if (h.won === true) {
+        statusClass = 'won';
+        statusIcon = '+';
+        statusText = 'Won';
+      } else if (h.won === false) {
+        statusClass = 'lost';
+        statusIcon = 'x';
+        statusText = 'Lost';
+      }
+
+      return `
+        <div class="history-item ${statusClass}">
+          <div class="history-status-badge ${statusClass}">${statusIcon}</div>
+          <div class="history-info">
+            <p class="history-question">${h.question}</p>
+            <p class="history-choice">You voted: <strong>${choiceLabel}</strong></p>
+          </div>
+          <div class="history-result ${statusClass}">${statusText}</div>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    list.innerHTML = '<div class="empty-state"><p>Failed to load</p></div>';
+  }
 }
 
 // --- Invite ---
@@ -650,6 +725,76 @@ function timeAgo(date) {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
+// --- Confetti ---
+function launchConfetti() {
+  const canvas = document.createElement('canvas');
+  canvas.id = 'confettiCanvas';
+  document.body.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  const particles = [];
+  const colors = ['#fbbf24', '#7c3aed', '#10b981', '#ef4444', '#3b82f6', '#f97316'];
+
+  for (let i = 0; i < 80; i++) {
+    particles.push({
+      x: Math.random() * canvas.width,
+      y: -10 - Math.random() * 100,
+      w: 6 + Math.random() * 6,
+      h: 4 + Math.random() * 4,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      vx: (Math.random() - 0.5) * 4,
+      vy: 2 + Math.random() * 4,
+      rot: Math.random() * 360,
+      rotSpeed: (Math.random() - 0.5) * 10
+    });
+  }
+
+  let frame = 0;
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let alive = false;
+
+    for (const p of particles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.1;
+      p.rot += p.rotSpeed;
+
+      if (p.y < canvas.height + 20) alive = true;
+
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate((p.rot * Math.PI) / 180);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    }
+
+    frame++;
+    if (alive && frame < 180) {
+      requestAnimationFrame(animate);
+    } else {
+      canvas.remove();
+    }
+  }
+  animate();
+}
+
+// --- Live Timer ---
+function startLiveTimers() {
+  setInterval(() => {
+    document.querySelectorAll('.prediction-timer').forEach(el => {
+      const card = el.closest('.prediction-card');
+      if (!card) return;
+      const expiresAt = card.dataset.expires;
+      if (expiresAt) el.textContent = getTimeLeft(expiresAt);
+    });
+  }, 30000); // Update every 30 seconds
+}
+startLiveTimers();
+
 // --- Utils ---
 function getTimeLeft(expiresAt) {
   const now = new Date();
@@ -658,13 +803,11 @@ function getTimeLeft(expiresAt) {
 
   if (diff <= 0) return 'Ended';
 
-  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
   const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
-  if (hours >= 24) {
-    const days = Math.floor(hours / 24);
-    return `${days}d left`;
-  }
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+  if (days > 0) return `${days}d ${hours}h left`;
+  if (hours > 0) return `${hours}h ${minutes}m left`;
+  return `${minutes}m left`;
 }

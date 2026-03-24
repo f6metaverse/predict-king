@@ -21,8 +21,8 @@ async function createOrUpdateUser(telegramId, data) {
 
   if (!existing) {
     const { rows } = await pool.query(
-      `INSERT INTO users (id, username, first_name, points, streak, best_streak, total_predictions, correct_predictions, referred_by, referral_count, last_bonus_date, bonus_streak)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `INSERT INTO users (id, username, first_name, points, streak, best_streak, total_predictions, correct_predictions, referred_by, referral_count, last_bonus_date, bonus_streak, chat_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
       [
         telegramId,
@@ -36,7 +36,8 @@ async function createOrUpdateUser(telegramId, data) {
         data.referredBy || null,
         data.referralCount || 0,
         data.lastBonusDate || null,
-        data.bonusStreak || 0
+        data.bonusStreak || 0,
+        data.chatId || null
       ]
     );
     return formatUser(rows[0]);
@@ -48,7 +49,7 @@ async function createOrUpdateUser(telegramId, data) {
     `UPDATE users SET
       username = $2, first_name = $3, points = $4, streak = $5, best_streak = $6,
       total_predictions = $7, correct_predictions = $8, referred_by = $9, referral_count = $10,
-      last_bonus_date = $11, bonus_streak = $12, last_active_at = NOW()
+      last_bonus_date = $11, bonus_streak = $12, chat_id = COALESCE($13, chat_id), last_active_at = NOW()
      WHERE id = $1 RETURNING *`,
     [
       telegramId,
@@ -62,7 +63,8 @@ async function createOrUpdateUser(telegramId, data) {
       merged.referredBy || null,
       merged.referralCount || 0,
       merged.lastBonusDate || null,
-      merged.bonusStreak || 0
+      merged.bonusStreak || 0,
+      merged.chatId || null
     ]
   );
   return formatUser(rows[0]);
@@ -97,7 +99,8 @@ function formatUser(row) {
     referredBy: row.referred_by,
     referralCount: row.referral_count,
     lastBonusDate: row.last_bonus_date,
-    bonusStreak: row.bonus_streak
+    bonusStreak: row.bonus_streak,
+    chatId: row.chat_id
   };
 }
 
@@ -155,6 +158,24 @@ function formatPrediction(row) {
     createdAt: row.created_at,
     resolvedAt: row.resolved_at
   };
+}
+
+// --- User History ---
+async function getUserHistory(userId, limit = 50) {
+  const { rows } = await pool.query(
+    `SELECT p.*, v.choice as user_choice
+     FROM predictions p
+     INNER JOIN votes v ON v.prediction_id = p.id
+     WHERE v.user_id = $1
+     ORDER BY p.created_at DESC
+     LIMIT $2`,
+    [userId, limit]
+  );
+  return rows.map(row => ({
+    ...formatPrediction(row),
+    userChoice: row.user_choice,
+    won: row.resolved ? row.result === row.user_choice : null
+  }));
 }
 
 // --- Votes ---
@@ -252,6 +273,7 @@ module.exports = {
   getUser, createOrUpdateUser, getAllUsers, getLeaderboard,
   getPredictions, getActivePredictions, getPrediction, addPrediction, resolvePrediction, resetPredictions,
   getVote, getUserVotes, addVote,
+  getUserHistory,
   addComment, getComments, getCommentCount,
   pool
 };

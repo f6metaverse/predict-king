@@ -4,7 +4,7 @@ const path = require('path');
 const TelegramBot = require('node-telegram-bot-api');
 const db = require('./db');
 const { startScheduler, generateDailyPredictions } = require('./predictions-engine');
-const { startResolveScheduler } = require('./auto-resolve');
+const { setBot, startResolveScheduler } = require('./auto-resolve');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,6 +13,7 @@ const APP_URL = process.env.APP_URL || `http://localhost:${PORT}`;
 
 // Telegram Bot
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+setBot(bot);
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -279,6 +280,17 @@ app.post('/api/reset-predictions', async (req, res) => {
   }
 });
 
+// --- User History API ---
+app.get('/api/history/:userId', async (req, res) => {
+  try {
+    const history = await db.getUserHistory(req.params.userId);
+    res.json(history);
+  } catch (e) {
+    console.error('History error:', e.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // --- Comments API ---
 
 // Get comments for a prediction
@@ -337,7 +349,8 @@ bot.onText(/\/start(.*)/, async (msg, match) => {
 
   await db.createOrUpdateUser(userId, {
     username: msg.from.username || '',
-    firstName: msg.from.first_name || 'Player'
+    firstName: msg.from.first_name || 'Player',
+    chatId: chatId.toString()
   });
 
   if (referredBy && referredBy !== userId) {

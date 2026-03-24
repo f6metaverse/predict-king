@@ -1007,3 +1007,212 @@ body::before {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* --- History Page --- */
+.history-stat-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.history-stat {
+  flex: 1;
+  text-align: center;
+  padding: 14px 8px;
+  border-radius: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+}
+
+.history-stat span {
+  display: block;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.history-stat label {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.history-stat.won span { color: var(--green); }
+.history-stat.lost span { color: var(--red); }
+.history-stat.pending span { color: var(--gold); }
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: var(--bg-card);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  animation: slideIn 0.3s ease;
+}
+
+.history-status-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.history-status-badge.won {
+  background: rgba(16, 185, 129, 0.2);
+  color: var(--green);
+}
+
+.history-status-badge.lost {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--red);
+}
+
+.history-status-badge.pending {
+  background: rgba(251, 191, 36, 0.2);
+  color: var(--gold);
+}
+
+.history-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.history-question {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-choice {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.history-result {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.history-result.won { color: var(--green); }
+.history-result.lost { color: var(--red); }
+.history-result.pending { color: var(--gold); }
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* --- Confetti Canvas --- */
+#confettiCanvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* --- Vote Animations Enhanced --- */
+.vote-btn {
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.vote-btn:active:not(.voted) {
+  transform: scale(0.93);
+}
+
+.vote-btn.just-voted {
+  animation: votePopIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes votePopIn {
+  0% { transform: scale(0.8); }
+  50% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+.vote-results.show {
+  animation: resultsReveal 0.6s ease;
+}
+
+@keyframes resultsReveal {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.result-bar-a, .result-bar-b {
+  transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* --- Hot Badge --- */
+.hot-badge {
+  background: linear-gradient(135deg, #ef4444, #f97316);
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 20px;
+  margin-left: 8px;
+  text-transform: uppercase;
+  animation: hotPulse 2s infinite;
+}
+
+@keyframes hotPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}
+
+/* --- Vote Count Teaser --- */
+.vote-teaser {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  font-style: italic;
+}
+
+/* --- Daily Popup Enhanced --- */
+.daily-popup {
+  animation: popupSlideUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes popupSlideUp {
+  from { opacity: 0; transform: translateY(50px) scale(0.9); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* --- Prediction Card Entrance --- */
+.prediction-card {
+  animation: cardEntrance 0.4s ease;
+  animation-fill-mode: both;
+}
+
+.prediction-card:nth-child(1) { animation-delay: 0s; }
+.prediction-card:nth-child(2) { animation-delay: 0.05s; }
+.prediction-card:nth-child(3) { animation-delay: 0.1s; }
+.prediction-card:nth-child(4) { animation-delay: 0.15s; }
+.prediction-card:nth-child(5) { animation-delay: 0.2s; }
+
+@keyframes cardEntrance {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}

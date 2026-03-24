@@ -5,6 +5,24 @@ const db = require('./db');
 // ============================================
 
 const FOOTBALL_API_KEY = process.env.FOOTBALL_API_KEY || '';
+let bot = null;
+
+function setBot(botInstance) {
+  bot = botInstance;
+}
+
+// --- SEND NOTIFICATION TO USER ---
+async function notifyUser(userId, message) {
+  if (!bot) return;
+  try {
+    const user = await db.getUser(userId);
+    if (user?.chatId) {
+      await bot.sendMessage(user.chatId, message, { parse_mode: 'Markdown' });
+    }
+  } catch (e) {
+    // User may have blocked the bot, ignore
+  }
+}
 
 // --- RESOLVE EXPIRED OPINION PREDICTIONS ---
 async function resolveByMajority() {
@@ -19,7 +37,7 @@ async function resolveByMajority() {
 
     const result = pred.votesA >= pred.votesB ? 'A' : 'B';
     await db.resolvePrediction(pred.id, result);
-    await awardPoints(pred.id, result);
+    await awardPoints(pred.id, result, pred);
     resolved++;
 
     const winner = result === 'A' ? pred.optionA : pred.optionB;
@@ -75,7 +93,7 @@ async function resolveCryptoPredictions() {
       const result = currentPrice > target ? 'A' : 'B';
 
       await db.resolvePrediction(pred.id, result);
-      await awardPoints(pred.id, result);
+      await awardPoints(pred.id, result, pred);
       resolved++;
 
       console.log(`Resolved "${pred.question}" -> ${result === 'A' ? 'YES' : 'NO'} (price: $${currentPrice})`);
@@ -106,7 +124,7 @@ async function resolveSportPredictions() {
 
     const result = pred.votesA >= pred.votesB ? 'A' : 'B';
     await db.resolvePrediction(pred.id, result);
-    await awardPoints(pred.id, result);
+    await awardPoints(pred.id, result, pred);
     resolved++;
 
     const winner = result === 'A' ? pred.optionA : pred.optionB;
@@ -116,9 +134,10 @@ async function resolveSportPredictions() {
   return resolved;
 }
 
-// --- AWARD POINTS TO WINNERS ---
-async function awardPoints(predictionId, result) {
+// --- AWARD POINTS TO WINNERS + NOTIFY ---
+async function awardPoints(predictionId, result, prediction) {
   const allUsers = await db.getAllUsers();
+  const winnerChoice = result === 'A' ? prediction.optionA : prediction.optionB;
 
   for (const userId of Object.keys(allUsers)) {
     const vote = await db.getVote(predictionId, userId);
@@ -129,15 +148,26 @@ async function awardPoints(predictionId, result) {
     if (vote.choice === result) {
       const newStreak = (user.streak || 0) + 1;
       const streakBonus = Math.min(newStreak * 5, 50);
+      const totalPoints = 10 + streakBonus;
       await db.createOrUpdateUser(userId, {
         ...user,
-        points: (user.points || 0) + 10 + streakBonus,
+        points: (user.points || 0) + totalPoints,
         streak: newStreak,
         bestStreak: Math.max(newStreak, user.bestStreak || 0),
         correctPredictions: (user.correctPredictions || 0) + 1
       });
+
+      // Notify winner
+      await notifyUser(userId,
+        `*YOU WERE RIGHT!* +${totalPoints} pts\n\n"${prediction.question}"\nAnswer: *${winnerChoice}*\n\nStreak: ${newStreak} | Points: ${(user.points || 0) + totalPoints}\n\n[Keep playing!](https://t.me/PredictKingAppBot)`
+      );
     } else {
       await db.createOrUpdateUser(userId, { ...user, streak: 0 });
+
+      // Notify loser (motivational)
+      await notifyUser(userId,
+        `*Wrong this time!* Streak reset\n\n"${prediction.question}"\nAnswer: *${winnerChoice}*\n\nCome back and rebuild your streak!\n\n[Play again](https://t.me/PredictKingAppBot)`
+      );
     }
   }
 }
@@ -171,4 +201,4 @@ function startResolveScheduler() {
   }, 10000);
 }
 
-module.exports = { resolveAll, startResolveScheduler };
+module.exports = { resolveAll, startResolveScheduler, setBot };
