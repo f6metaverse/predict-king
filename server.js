@@ -339,6 +339,7 @@ async function initPredictions() {
   }
   startScheduler();
   startResolveScheduler();
+  startBroadcastScheduler();
 }
 
 // --- Telegram Bot Commands ---
@@ -422,6 +423,85 @@ bot.on('callback_query', async (query) => {
   }
 
   bot.answerCallbackQuery(query.id);
+});
+
+// --- Daily Broadcast ---
+async function broadcastHotPredictions() {
+  try {
+    const predictions = await db.getActivePredictions();
+    if (predictions.length === 0) return;
+
+    // Pick top 3 most voted predictions
+    const hot = [...predictions]
+      .sort((a, b) => (b.votesA + b.votesB) - (a.votesA + a.votesB))
+      .slice(0, 3);
+
+    const predList = hot.map((p, i) => {
+      const total = p.votesA + p.votesB;
+      return `${i + 1}. ${p.emoji} *${p.question}*${total > 0 ? ` (${total} votes)` : ''}`;
+    }).join('\n\n');
+
+    const message = `*HOT PREDICTIONS TODAY*\n\n${predList}\n\nTap below to vote and earn points!`;
+
+    const allUsers = await db.getAllUsers();
+    let sent = 0;
+
+    for (const userId of Object.keys(allUsers)) {
+      const user = allUsers[userId];
+      if (!user.chatId) continue;
+
+      try {
+        await bot.sendMessage(user.chatId, message, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [[
+              { text: 'Play Now', web_app: { url: APP_URL } }
+            ]]
+          }
+        });
+        sent++;
+        // Small delay to avoid Telegram rate limits
+        await new Promise(r => setTimeout(r, 100));
+      } catch (e) {
+        // User blocked the bot or chat not found, skip
+      }
+    }
+
+    console.log(`Broadcast sent to ${sent} users`);
+  } catch (e) {
+    console.error('Broadcast error:', e.message);
+  }
+}
+
+// Schedule daily broadcast at 10:00 AM UTC
+function startBroadcastScheduler() {
+  console.log('Broadcast scheduler started');
+
+  // Check every 30 minutes if it's time to broadcast
+  setInterval(async () => {
+    const now = new Date();
+    const hour = now.getUTCHours();
+    const minute = now.getUTCMinutes();
+
+    // Send at 10:00 UTC (12:00 Paris time) and 18:00 UTC (20:00 Paris time)
+    if ((hour === 10 || hour === 18) && minute < 30) {
+      const lastBroadcast = global._lastBroadcast || 0;
+      if (Date.now() - lastBroadcast > 3600000) { // Don't send twice in an hour
+        global._lastBroadcast = Date.now();
+        await broadcastHotPredictions();
+      }
+    }
+  }, 30 * 60 * 1000);
+}
+
+// Admin endpoint to trigger broadcast manually
+app.post('/api/broadcast', async (req, res) => {
+  try {
+    await broadcastHotPredictions();
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // --- Start ---
