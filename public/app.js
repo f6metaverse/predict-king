@@ -349,7 +349,7 @@ async function loadLeaderboard() {
         <span class="lb-rank ${i >= 3 ? 'num' : ''}">${medals[i] || (i + 1)}</span>
         <div class="lb-info">
           <div class="lb-name">${u.firstName}${u.id === currentUser?.id ? ' (you)' : ''}</div>
-          <div class="lb-stats">🔥 ${u.streak || 0} streak | ✅ ${u.correctPredictions || 0} correctes</div>
+          <div class="lb-stats">🔥 ${u.streak || 0} streak | ✅ ${u.correctPredictions || 0} correct</div>
         </div>
         <span class="lb-points">⭐ ${u.points}</span>
       </div>
@@ -433,14 +433,14 @@ function getTimeLeft(expiresAt) {
   const end = new Date(expiresAt);
   const diff = end - now;
 
-  if (diff <= 0) return 'Termine';
+  if (diff <= 0) return 'Ended';
 
   const hours = Math.floor(diff / (1000 * 60 * 60));
   const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
   if (hours >= 24) {
     const days = Math.floor(hours / 24);
-    return `${days}j restant${days > 1 ? 's' : ''}`;
+    return `${days}d left`;
   }
   if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
