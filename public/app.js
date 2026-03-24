@@ -204,6 +204,7 @@ function attachVoteListeners() {
   document.querySelectorAll('.vote-btn:not(.voted)').forEach(btn => {
     btn.addEventListener('click', () => vote(btn.dataset.prediction, btn.dataset.choice));
   });
+  attachShareListeners();
   attachCommentListeners();
 }
 
@@ -292,15 +293,16 @@ function attachShareListeners() {
 }
 
 function sharePrediction(question, choice, percent) {
-  if (tg) tg.HapticFeedback?.impactOccurred('light');
+  if (tg) tg.HapticFeedback?.impactOccurred('medium');
 
-  const text = `👑 PREDICT KING\n\n🔮 ${question}\n\n✅ I voted: ${choice} (${percent}% agree)\n\nWhat do you think? Come vote!`;
-  const url = `https://t.me/PredictKingAppBot`;
+  const botLink = `https://t.me/PredictKingAppBot`;
+  const text = `PREDICT KING\n\n${question}\n\nI voted: ${choice} (${percent}% agree)\n\nWhat's your take? Tap to play:`;
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(botLink)}&text=${encodeURIComponent(text)}`;
 
   if (tg) {
-    tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`);
+    tg.openTelegramLink(shareUrl);
   } else {
-    navigator.clipboard?.writeText(text + '\n' + url);
+    navigator.clipboard?.writeText(text + '\n' + botLink);
     alert('Link copied!');
   }
 }
