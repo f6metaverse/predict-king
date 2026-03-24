@@ -815,12 +815,12 @@ async function generateDailyPredictions() {
   for (const result of results) {
     if (result.status === 'fulfilled') {
       for (const pred of result.value) {
-        const existing = db.getActivePredictions();
+        const existing = await db.getActivePredictions();
         const isDupe = existing.some(e =>
           e.question.toLowerCase().includes(pred.question.toLowerCase().slice(0, 30))
         );
         if (!isDupe) {
-          db.addPrediction(pred);
+          await db.addPrediction(pred);
           total++;
         }
       }
@@ -833,45 +833,35 @@ async function generateDailyPredictions() {
   return total;
 }
 
-function cleanupExpired() {
-  const preds = db.getPredictions();
+async function cleanupExpired() {
+  // With PostgreSQL, expired predictions stay in DB but are filtered by queries
+  // No manual cleanup needed - getActivePredictions() already filters them
+  const preds = await db.getPredictions();
   const now = new Date();
-  let cleaned = 0;
-
-  const active = preds.filter(p => {
-    if (!p.resolved && new Date(p.expiresAt) < now) {
-      cleaned++;
-      return false;
-    }
-    return true;
-  });
-
-  if (cleaned > 0) {
-    const fs = require('fs');
-    const path = require('path');
-    fs.writeFileSync(path.join(__dirname, 'data', 'predictions.json'), JSON.stringify(active, null, 2));
-    console.log(`🧹 Cleaned ${cleaned} expired predictions`);
+  const expired = preds.filter(p => !p.resolved && new Date(p.expiresAt) < now);
+  if (expired.length > 0) {
+    console.log(`${expired.length} expired predictions pending resolution`);
   }
 }
 
-function startScheduler() {
-  console.log('⏰ Prediction scheduler started');
+async function startScheduler() {
+  console.log('Prediction scheduler started');
 
-  const active = db.getActivePredictions();
+  const active = await db.getActivePredictions();
   if (active.length < 5) {
-    generateDailyPredictions();
+    await generateDailyPredictions();
   }
 
   setInterval(async () => {
-    cleanupExpired();
-    const active = db.getActivePredictions();
+    await cleanupExpired();
+    const active = await db.getActivePredictions();
     if (active.length < 8) {
       await generateDailyPredictions();
     }
   }, 8 * 60 * 60 * 1000);
 
-  setInterval(() => {
-    cleanupExpired();
+  setInterval(async () => {
+    await cleanupExpired();
   }, 60 * 60 * 1000);
 }
 

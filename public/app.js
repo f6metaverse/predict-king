@@ -180,8 +180,23 @@ function renderPrediction(p) {
           <span class="result-label-b">${hasVoted ? p.percentB + '%' : ''} ${p.optionB}</span>
         </div>
         <p class="total-votes">${hasVoted ? p.totalVotes + ' votes' : ''}</p>
-        ${hasVoted ? `<button class="share-btn" data-question="${encodeURIComponent(p.question)}" data-choice="${p.userVote === 'A' ? p.optionA : p.optionB}" data-percent="${p.userVote === 'A' ? p.percentA : p.percentB}">📤 Share my prediction</button>` : ''}
+        ${hasVoted ? `<button class="share-btn" data-question="${encodeURIComponent(p.question)}" data-choice="${p.userVote === 'A' ? p.optionA : p.optionB}" data-percent="${p.userVote === 'A' ? p.percentA : p.percentB}">Share my prediction</button>` : ''}
       </div>
+      ${hasVoted ? `
+      <div class="comments-section" data-prediction="${p.id}">
+        <button class="comments-toggle" data-prediction="${p.id}">
+          <span>Comments</span>
+          <span class="comments-count" id="count-${p.id}"></span>
+        </button>
+        <div class="comments-body" id="comments-${p.id}" style="display:none">
+          <div class="comment-input-row">
+            <input type="text" class="comment-input" id="input-${p.id}" placeholder="Drop your take..." maxlength="280">
+            <button class="comment-send" data-prediction="${p.id}">Send</button>
+          </div>
+          <div class="comments-list" id="list-${p.id}"></div>
+        </div>
+      </div>
+      ` : ''}
     </div>`;
 }
 
@@ -189,6 +204,7 @@ function attachVoteListeners() {
   document.querySelectorAll('.vote-btn:not(.voted)').forEach(btn => {
     btn.addEventListener('click', () => vote(btn.dataset.prediction, btn.dataset.choice));
   });
+  attachCommentListeners();
 }
 
 async function vote(predictionId, choice) {
@@ -432,6 +448,125 @@ function loadInvite() {
 
     if (tg) tg.HapticFeedback?.impactOccurred('medium');
   });
+}
+
+// --- Comments ---
+function attachCommentListeners() {
+  document.querySelectorAll('.comments-toggle').forEach(btn => {
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+    newBtn.addEventListener('click', () => {
+      const pid = newBtn.dataset.prediction;
+      const body = document.getElementById(`comments-${pid}`);
+      const isOpen = body.style.display !== 'none';
+      body.style.display = isOpen ? 'none' : 'block';
+      if (!isOpen) loadComments(pid);
+      if (tg) tg.HapticFeedback?.impactOccurred('light');
+    });
+  });
+
+  document.querySelectorAll('.comment-send').forEach(btn => {
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+    newBtn.addEventListener('click', () => {
+      postComment(newBtn.dataset.prediction);
+    });
+  });
+
+  document.querySelectorAll('.comment-input').forEach(input => {
+    const newInput = input.cloneNode(true);
+    input.parentNode.replaceChild(newInput, input);
+    newInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        const pid = newInput.id.replace('input-', '');
+        postComment(pid);
+      }
+    });
+  });
+}
+
+async function loadComments(predictionId) {
+  const list = document.getElementById(`list-${predictionId}`);
+  list.innerHTML = '<div class="loading-comments">Loading...</div>';
+
+  try {
+    const res = await fetch(`/api/comments/${predictionId}`);
+    const comments = await res.json();
+
+    const countEl = document.getElementById(`count-${predictionId}`);
+    if (countEl) countEl.textContent = comments.length > 0 ? `(${comments.length})` : '';
+
+    if (comments.length === 0) {
+      list.innerHTML = '<p class="no-comments">No comments yet. Be the first!</p>';
+      return;
+    }
+
+    list.innerHTML = comments.map(c => `
+      <div class="comment">
+        <div class="comment-header">
+          <span class="comment-author">${escapeHtml(c.firstName)}</span>
+          <span class="comment-time">${timeAgo(c.createdAt)}</span>
+        </div>
+        <p class="comment-text">${escapeHtml(c.text)}</p>
+      </div>
+    `).join('');
+  } catch (e) {
+    list.innerHTML = '<p class="no-comments">Failed to load</p>';
+  }
+}
+
+async function postComment(predictionId) {
+  if (!currentUser) return;
+
+  const input = document.getElementById(`input-${predictionId}`);
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.disabled = true;
+
+  try {
+    const res = await fetch('/api/comments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        predictionId,
+        userId: currentUser.id,
+        text
+      })
+    });
+
+    const data = await res.json();
+    if (data.error) {
+      console.error(data.error);
+      input.disabled = false;
+      return;
+    }
+
+    input.value = '';
+    input.disabled = false;
+    if (tg) tg.HapticFeedback?.impactOccurred('light');
+    loadComments(predictionId);
+  } catch (e) {
+    console.error('Post comment failed:', e);
+    input.disabled = false;
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function timeAgo(date) {
+  const now = new Date();
+  const d = new Date(date);
+  const diff = Math.floor((now - d) / 1000);
+
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
 }
 
 // --- Utils ---

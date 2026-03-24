@@ -1,48 +1,41 @@
 const db = require('./db');
 
 // ============================================
-// PREDICT KING — AUTO-RESOLVE ENGINE
-// ============================================
-// 1. Sports: Check API-Sports for final scores
-// 2. Crypto: Check CoinGecko for price targets
-// 3. Opinion: Majority vote wins when expired
+// PREDICT KING - AUTO-RESOLVE ENGINE
 // ============================================
 
 const FOOTBALL_API_KEY = process.env.FOOTBALL_API_KEY || '';
 
 // --- RESOLVE EXPIRED OPINION PREDICTIONS ---
-// If prediction expired and not resolved, majority vote wins
-function resolveByMajority() {
-  const preds = db.getPredictions();
+async function resolveByMajority() {
+  const preds = await db.getPredictions();
   const now = new Date();
   let resolved = 0;
 
   for (const pred of preds) {
     if (pred.resolved) continue;
     if (new Date(pred.expiresAt) > now) continue;
-    if (pred.votesA + pred.votesB === 0) continue; // no votes, skip
+    if (pred.votesA + pred.votesB === 0) continue;
 
-    // Majority wins
     const result = pred.votesA >= pred.votesB ? 'A' : 'B';
-    db.resolvePrediction(pred.id, result);
-    awardPoints(pred.id, result);
+    await db.resolvePrediction(pred.id, result);
+    await awardPoints(pred.id, result);
     resolved++;
 
     const winner = result === 'A' ? pred.optionA : pred.optionB;
-    console.log(`✅ Resolved "${pred.question}" → ${winner} (majority vote)`);
+    console.log(`Resolved "${pred.question}" -> ${winner} (majority vote)`);
   }
 
-  if (resolved > 0) console.log(`🏆 Resolved ${resolved} predictions by majority vote`);
+  if (resolved > 0) console.log(`Resolved ${resolved} predictions by majority vote`);
   return resolved;
 }
 
 // --- RESOLVE CRYPTO PREDICTIONS BY PRICE ---
 async function resolveCryptoPredictions() {
-  const preds = db.getPredictions();
+  const preds = await db.getPredictions();
   const now = new Date();
   let resolved = 0;
 
-  // Find expired crypto price predictions
   const cryptoPreds = preds.filter(p =>
     !p.resolved &&
     p.category === 'crypto' &&
@@ -69,8 +62,6 @@ async function resolveCryptoPredictions() {
     };
 
     for (const pred of cryptoPreds) {
-      // Extract coin and target price from question
-      // e.g., "Bitcoin above $95,000 this weekend?"
       const match = pred.question.match(/(\w+) above \$([\d,]+)/);
       if (!match) continue;
 
@@ -81,13 +72,13 @@ async function resolveCryptoPredictions() {
       if (!coinId || !data[coinId]) continue;
 
       const currentPrice = data[coinId].usd;
-      const result = currentPrice > target ? 'A' : 'B'; // A = YES, B = NO
+      const result = currentPrice > target ? 'A' : 'B';
 
-      db.resolvePrediction(pred.id, result);
-      awardPoints(pred.id, result);
+      await db.resolvePrediction(pred.id, result);
+      await awardPoints(pred.id, result);
       resolved++;
 
-      console.log(`✅ Resolved "${pred.question}" → ${result === 'A' ? 'YES' : 'NO'} (price: $${currentPrice})`);
+      console.log(`Resolved "${pred.question}" -> ${result === 'A' ? 'YES' : 'NO'} (price: $${currentPrice})`);
     }
   } catch (e) {
     console.error('Crypto resolve error:', e.message);
@@ -96,13 +87,12 @@ async function resolveCryptoPredictions() {
   return resolved;
 }
 
-// --- RESOLVE SPORT PREDICTIONS BY SCORE ---
+// --- RESOLVE SPORT PREDICTIONS ---
 async function resolveSportPredictions() {
-  const preds = db.getPredictions();
+  const preds = await db.getPredictions();
   const now = new Date();
   let resolved = 0;
 
-  // Find expired sport predictions with "vs" and "Who wins?"
   const sportPreds = preds.filter(p =>
     !p.resolved &&
     ['football', 'nba', 'nfl', 'hockey', 'rugby'].includes(p.category) &&
@@ -111,63 +101,58 @@ async function resolveSportPredictions() {
     p.question.includes('Who wins')
   );
 
-  // For sport predictions that expired, resolve by majority vote
-  // (checking actual scores for every match would use too many API calls)
   for (const pred of sportPreds) {
     if (pred.votesA + pred.votesB === 0) continue;
 
     const result = pred.votesA >= pred.votesB ? 'A' : 'B';
-    db.resolvePrediction(pred.id, result);
-    awardPoints(pred.id, result);
+    await db.resolvePrediction(pred.id, result);
+    await awardPoints(pred.id, result);
     resolved++;
 
     const winner = result === 'A' ? pred.optionA : pred.optionB;
-    console.log(`✅ Resolved "${pred.question}" → ${winner} (majority)`);
+    console.log(`Resolved "${pred.question}" -> ${winner} (majority)`);
   }
 
   return resolved;
 }
 
 // --- AWARD POINTS TO WINNERS ---
-function awardPoints(predictionId, result) {
-  const allUsers = db.getAllUsers();
+async function awardPoints(predictionId, result) {
+  const allUsers = await db.getAllUsers();
 
   for (const userId of Object.keys(allUsers)) {
-    const vote = db.getVote(predictionId, userId);
+    const vote = await db.getVote(predictionId, userId);
     if (!vote) continue;
 
     const user = allUsers[userId];
 
     if (vote.choice === result) {
-      // Winner! Award points with streak bonus
       const newStreak = (user.streak || 0) + 1;
       const streakBonus = Math.min(newStreak * 5, 50);
-      db.createOrUpdateUser(userId, {
+      await db.createOrUpdateUser(userId, {
+        ...user,
         points: (user.points || 0) + 10 + streakBonus,
         streak: newStreak,
         bestStreak: Math.max(newStreak, user.bestStreak || 0),
         correctPredictions: (user.correctPredictions || 0) + 1
       });
     } else {
-      // Wrong prediction, reset streak
-      db.createOrUpdateUser(userId, {
-        streak: 0
-      });
+      await db.createOrUpdateUser(userId, { ...user, streak: 0 });
     }
   }
 }
 
 // --- MAIN RESOLVER ---
 async function resolveAll() {
-  console.log('\n🔍 Checking predictions to resolve...');
+  console.log('\nChecking predictions to resolve...');
 
   const crypto = await resolveCryptoPredictions();
   const sports = await resolveSportPredictions();
-  const opinions = resolveByMajority();
+  const opinions = await resolveByMajority();
 
   const total = crypto + sports + opinions;
   if (total > 0) {
-    console.log(`🏆 Total resolved: ${total} (crypto: ${crypto}, sports: ${sports}, opinions: ${opinions})\n`);
+    console.log(`Total resolved: ${total} (crypto: ${crypto}, sports: ${sports}, opinions: ${opinions})\n`);
   }
 
   return total;
@@ -175,14 +160,12 @@ async function resolveAll() {
 
 // --- SCHEDULER ---
 function startResolveScheduler() {
-  console.log('⚖️  Auto-resolve scheduler started');
+  console.log('Auto-resolve scheduler started');
 
-  // Check every hour
   setInterval(() => {
     resolveAll();
   }, 60 * 60 * 1000);
 
-  // Also run on startup after a short delay
   setTimeout(() => {
     resolveAll();
   }, 10000);
