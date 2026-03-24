@@ -141,6 +141,10 @@ function renderPrediction(p) {
     gaming: '🎮 Gaming',
     cinema: '🎬 Movies',
     drama: '👀 Drama',
+    politics: '🏛️ Politics',
+    world: '🌍 World',
+    science: '🔬 Science',
+    health: '💪 Health',
     trending: '🔥 Trending',
     general: '🔮 General'
   };

@@ -600,6 +600,149 @@ async function generateDramaPredictions() {
   return pickRandom(predictions, 1);
 }
 
+// --- POLITICS (LIVE NEWS) ---
+async function generatePoliticsPredictions() {
+  const predictions = [];
+
+  try {
+    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=politics`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.results && data.results.length > 0) {
+      for (const article of data.results.slice(0, 4)) {
+        if (article.title && article.title.length > 15) {
+          predictions.push({
+            question: `${article.title.slice(0, 80)} — Good or bad for the world?`,
+            optionA: 'Good move', optionB: 'Bad move',
+            category: 'politics', emoji: '🏛️', expiresAt: expires(48)
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Politics News error:', e.message);
+  }
+
+  const fallbacks = [
+    { question: 'Will a major world leader resign or be removed this year?', optionA: 'YES', optionB: 'NO' },
+    { question: 'US-China relations improving or worsening in 2026?', optionA: 'Improving', optionB: 'Worsening' },
+    { question: 'A new country joining NATO or BRICS this year?', optionA: 'YES', optionB: 'NO' },
+    { question: 'Next US election: Democrats or Republicans winning?', optionA: 'Democrats', optionB: 'Republicans' },
+  ];
+  predictions.push(...fallbacks.map(p => ({ ...p, category: 'politics', emoji: '🏛️', expiresAt: expires(96) })));
+
+  return pickRandom(predictions, 1);
+}
+
+// --- WORLD / GEOPOLITICS (LIVE NEWS) ---
+async function generateWorldPredictions() {
+  const predictions = [];
+
+  try {
+    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=world`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.results && data.results.length > 0) {
+      for (const article of data.results.slice(0, 4)) {
+        if (article.title && article.title.length > 15) {
+          predictions.push({
+            question: `${article.title.slice(0, 80)} — Will this escalate?`,
+            optionA: 'YES', optionB: 'NO',
+            category: 'world', emoji: '🌍', expiresAt: expires(48)
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('World News error:', e.message);
+  }
+
+  const fallbacks = [
+    { question: 'A major peace deal happening in 2026?', optionA: 'YES', optionB: 'NO' },
+    { question: 'Global economy: recession or growth in 2026?', optionA: 'Growth', optionB: 'Recession' },
+    { question: 'The next big global crisis will be about?', optionA: 'Economy', optionB: 'Climate' },
+  ];
+  predictions.push(...fallbacks.map(p => ({ ...p, category: 'world', emoji: '🌍', expiresAt: expires(96) })));
+
+  return pickRandom(predictions, 1);
+}
+
+// --- SCIENCE & SPACE (LIVE NEWS) ---
+async function generateSciencePredictions() {
+  const predictions = [];
+
+  try {
+    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=science`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.results && data.results.length > 0) {
+      for (const article of data.results.slice(0, 3)) {
+        if (article.title && article.title.length > 15) {
+          predictions.push({
+            question: `${article.title.slice(0, 80)} — Breakthrough or hype?`,
+            optionA: 'Breakthrough', optionB: 'Overhyped',
+            category: 'science', emoji: '🔬', expiresAt: expires(72)
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Science News error:', e.message);
+  }
+
+  const fallbacks = [
+    { question: 'Humans on Mars before 2030?', optionA: 'YES', optionB: 'NO' },
+    { question: 'AI achieving AGI before 2028?', optionA: 'YES', optionB: 'NO' },
+    { question: 'A major space discovery this year?', optionA: 'YES', optionB: 'NO' },
+    { question: 'Nuclear fusion becoming viable for energy this decade?', optionA: 'YES', optionB: 'NO' },
+  ];
+  predictions.push(...fallbacks.map(p => ({ ...p, category: 'science', emoji: '🔬', expiresAt: expires(96) })));
+
+  return pickRandom(predictions, 1);
+}
+
+// --- HEALTH & FITNESS (LIVE NEWS) ---
+async function generateHealthPredictions() {
+  const predictions = [];
+
+  try {
+    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=health`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.results && data.results.length > 0) {
+      for (const article of data.results.slice(0, 3)) {
+        if (article.title && article.title.length > 15) {
+          predictions.push({
+            question: `${article.title.slice(0, 80)} — Game changer or overblown?`,
+            optionA: 'Game changer', optionB: 'Overblown',
+            category: 'health', emoji: '💪', expiresAt: expires(72)
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Health News error:', e.message);
+  }
+
+  const fallbacks = [
+    { question: 'Ozempic still the biggest health trend in 2026?', optionA: 'YES', optionB: 'Something new' },
+    { question: 'A cure for a major disease announced this year?', optionA: 'YES', optionB: 'NO' },
+    { question: 'Cold plunge or sauna: better for health?', optionA: 'Cold plunge', optionB: 'Sauna' },
+    { question: 'Mental health apps actually helping people?', optionA: 'YES', optionB: 'Placebo' },
+  ];
+  predictions.push(...fallbacks.map(p => ({ ...p, category: 'health', emoji: '💪', expiresAt: expires(96) })));
+
+  return pickRandom(predictions, 1);
+}
+
 // --- NEWS-BASED PREDICTIONS ---
 async function generateNewsPredictions() {
   const predictions = [];
@@ -661,6 +804,10 @@ async function generateDailyPredictions() {
     generateGamingPredictions(),
     generateCinemaPredictions(),
     generateDramaPredictions(),
+    generatePoliticsPredictions(),
+    generateWorldPredictions(),
+    generateSciencePredictions(),
+    generateHealthPredictions(),
     generateNewsPredictions()
   ]);
 
