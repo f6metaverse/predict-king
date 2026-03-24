@@ -89,15 +89,28 @@ async function generateFootballPredictions() {
     if (!FOOTBALL_API_KEY) throw new Error('No API key');
 
     const today = new Date().toISOString().split('T')[0];
-    const leagues = [39, 140, 61, 135, 2, 78]; // PL, La Liga, Ligue 1, Serie A, UCL, Bundesliga
-    const leagueId = leagues[Math.floor(Math.random() * leagues.length)];
+    // Also check tomorrow for upcoming matches
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
-    const url = `https://v3.football.api-sports.io/fixtures?date=${today}&league=${leagueId}&season=2025`;
-    const res = await fetch(url, { headers: { 'x-apisports-key': FOOTBALL_API_KEY } });
-    const data = await res.json();
+    // Fetch today's matches across all leagues
+    const url = `https://v3.football.api-sports.io/fixtures?date=${today}&season=2025`;
+    const url2 = `https://v3.football.api-sports.io/fixtures?date=${tomorrow}&season=2025`;
+    const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
 
-    if (data.response && data.response.length > 0) {
-      for (const match of data.response.slice(0, 5)) {
+    const [res1, res2] = await Promise.all([
+      fetch(url, { headers }),
+      fetch(url2, { headers })
+    ]);
+    const [data1, data2] = await Promise.all([res1.json(), res2.json()]);
+
+    const allMatches = [...(data1.response || []), ...(data2.response || [])];
+    // Filter for top leagues: PL, La Liga, Ligue 1, Serie A, UCL, Bundesliga, MLS, Liga MX
+    const topLeagues = [39, 140, 61, 135, 2, 78, 253, 262];
+    const topMatches = allMatches.filter(m => topLeagues.includes(m.league?.id));
+    const matches = topMatches.length > 0 ? topMatches : allMatches;
+
+    if (matches.length > 0) {
+      for (const match of matches.slice(0, 6)) {
         const home = match.teams.home.name;
         const away = match.teams.away.name;
         const league = match.league.name;
@@ -142,52 +155,262 @@ function getFootballFallbacks() {
   return pools.map(p => ({ ...p, category: 'football', emoji: '⚽', expiresAt: expires(48) }));
 }
 
-// --- NBA PREDICTIONS ---
-function generateNBAPredictions() {
-  const pools = [
-    { question: 'Wembanyama winning MVP this season?', optionA: 'YES', optionB: 'NO' },
-    { question: 'LeBron James retiring in 2026?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Who wins the NBA Championship?', optionA: 'Celtics', optionB: 'Nuggets' },
-    { question: 'Steph Curry breaking his own 3-point record?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Better stats this month: Wemby or Luka?', optionA: 'Wemby', optionB: 'Luka' },
-    { question: 'A player dropping 60+ points this week?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Lakers making the playoffs?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Most exciting young star in the NBA?', optionA: 'Wembanyama', optionB: 'Ant Edwards' },
-    { question: 'Warriors still contenders without major trades?', optionA: 'YES', optionB: 'NO' },
-    { question: 'A 7-game series in the NBA Finals this year?', optionA: 'YES', optionB: 'NO' },
-  ];
-  return pickRandom(pools.map(p => ({ ...p, category: 'nba', emoji: '🏀', expiresAt: expires(48) })), 2);
+// --- NBA PREDICTIONS (LIVE API) ---
+async function generateNBAPredictions() {
+  const predictions = [];
+
+  try {
+    if (!FOOTBALL_API_KEY) throw new Error('No API key');
+
+    const today = new Date().toISOString().split('T')[0];
+    const url = `https://v1.basketball.api-sports.io/games?date=${today}`;
+    const res = await fetch(url, { headers: { 'x-apisports-key': FOOTBALL_API_KEY } });
+    const data = await res.json();
+
+    if (data.response && data.response.length > 0) {
+      const nbaGames = data.response.filter(g => g.league?.name?.includes('NBA'));
+      for (const game of nbaGames.slice(0, 4)) {
+        const home = game.teams.home.name;
+        const away = game.teams.away.name;
+        const templates = [
+          { question: `NBA: ${home} vs ${away} — Who wins?`, optionA: home, optionB: away },
+          { question: `${home} vs ${away}: Over 220 combined points?`, optionA: 'YES', optionB: 'NO' },
+        ];
+        predictions.push({
+          ...templates[Math.floor(Math.random() * templates.length)],
+          category: 'nba', emoji: '🏀', expiresAt: expires(24)
+        });
+      }
+    }
+  } catch (e) {
+    console.error('NBA API error:', e.message);
+  }
+
+  if (predictions.length === 0) {
+    const pools = [
+      { question: 'Wembanyama winning MVP this season?', optionA: 'YES', optionB: 'NO' },
+      { question: 'LeBron James retiring in 2026?', optionA: 'YES', optionB: 'NO' },
+      { question: 'Who wins the NBA Championship?', optionA: 'Celtics', optionB: 'Nuggets' },
+      { question: 'Steph Curry breaking his own 3-point record?', optionA: 'YES', optionB: 'NO' },
+      { question: 'Better stats this month: Wemby or Luka?', optionA: 'Wemby', optionB: 'Luka' },
+      { question: 'A player dropping 60+ points this week?', optionA: 'YES', optionB: 'NO' },
+      { question: 'Lakers making the playoffs?', optionA: 'YES', optionB: 'NO' },
+      { question: 'Most exciting young star in the NBA?', optionA: 'Wembanyama', optionB: 'Ant Edwards' },
+    ];
+    predictions.push(...pools.map(p => ({ ...p, category: 'nba', emoji: '🏀', expiresAt: expires(48) })));
+  }
+
+  return pickRandom(predictions, 2);
 }
 
-// --- UFC / COMBAT ---
-function generateCombatPredictions() {
-  const pools = [
-    { question: 'UFC main event this weekend ending by KO?', optionA: 'KO/TKO', optionB: 'Decision' },
-    { question: 'Conor McGregor actually coming back to fight?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Jake Paul losing his next fight?', optionA: 'He loses', optionB: 'He wins' },
-    { question: 'Next UFC champion coming from Africa?', optionA: 'YES', optionB: 'NO' },
-    { question: 'A fight ending in under 30 seconds this month?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Tyson Fury making a comeback?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Next big boxing match: KO or decision?', optionA: 'KO', optionB: 'Decision' },
-    { question: 'Jon Jones the GOAT of MMA?', optionA: 'GOAT', optionB: 'Overrated' },
-    { question: 'Islam Makhachev staying unbeaten this year?', optionA: 'YES', optionB: 'NO' },
-  ];
-  return pickRandom(pools.map(p => ({ ...p, category: 'combat', emoji: '🥊', expiresAt: expires(72) })), 1);
+// --- UFC / COMBAT (LIVE API) ---
+async function generateCombatPredictions() {
+  const predictions = [];
+
+  try {
+    if (!FOOTBALL_API_KEY) throw new Error('No API key');
+
+    // Get upcoming MMA events
+    const url = `https://v1.mma.api-sports.io/fights?next=5`;
+    const res = await fetch(url, { headers: { 'x-apisports-key': FOOTBALL_API_KEY } });
+    const data = await res.json();
+
+    if (data.response && data.response.length > 0) {
+      for (const fight of data.response.slice(0, 3)) {
+        if (fight.fighters?.first?.name && fight.fighters?.second?.name) {
+          const f1 = fight.fighters.first.name;
+          const f2 = fight.fighters.second.name;
+          const templates = [
+            { question: `${f1} vs ${f2} — Who wins?`, optionA: f1, optionB: f2 },
+            { question: `${f1} vs ${f2}: KO or Decision?`, optionA: 'KO/TKO', optionB: 'Decision' },
+          ];
+          predictions.push({
+            ...templates[Math.floor(Math.random() * templates.length)],
+            category: 'combat', emoji: '🥊', expiresAt: expires(72)
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('MMA API error:', e.message);
+  }
+
+  if (predictions.length === 0) {
+    const pools = [
+      { question: 'UFC main event this weekend ending by KO?', optionA: 'KO/TKO', optionB: 'Decision' },
+      { question: 'Conor McGregor actually coming back to fight?', optionA: 'YES', optionB: 'NO' },
+      { question: 'Jake Paul losing his next fight?', optionA: 'He loses', optionB: 'He wins' },
+      { question: 'Jon Jones the GOAT of MMA?', optionA: 'GOAT', optionB: 'Overrated' },
+      { question: 'Islam Makhachev staying unbeaten this year?', optionA: 'YES', optionB: 'NO' },
+    ];
+    predictions.push(...pools.map(p => ({ ...p, category: 'combat', emoji: '🥊', expiresAt: expires(72) })));
+  }
+
+  return pickRandom(predictions, 1);
 }
 
-// --- F1 ---
-function generateF1Predictions() {
-  const pools = [
-    { question: 'Verstappen winning the next Grand Prix?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Hamilton regretting Ferrari before end of season?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Leclerc winning at Monaco?', optionA: 'YES', optionB: 'NO' },
-    { question: 'More than 3 DNFs at the next GP?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Who finishes higher in the championship?', optionA: 'Red Bull', optionB: 'Ferrari' },
-    { question: 'Safety Car in the next race?', optionA: 'YES', optionB: 'NO' },
-    { question: 'McLaren becoming a serious title contender?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Fastest lap under 1:20 at the next GP?', optionA: 'YES', optionB: 'NO' },
-  ];
-  return pickRandom(pools.map(p => ({ ...p, category: 'f1', emoji: '🏎️', expiresAt: expires(72) })), 1);
+// --- F1 (LIVE API) ---
+async function generateF1Predictions() {
+  const predictions = [];
+
+  try {
+    if (!FOOTBALL_API_KEY) throw new Error('No API key');
+
+    const url = `https://v1.formula-1.api-sports.io/races?next=3`;
+    const res = await fetch(url, { headers: { 'x-apisports-key': FOOTBALL_API_KEY } });
+    const data = await res.json();
+
+    if (data.response && data.response.length > 0) {
+      for (const race of data.response.slice(0, 2)) {
+        const name = race.competition?.name || 'next race';
+        predictions.push({
+          question: `F1 ${name}: Who takes pole position?`,
+          optionA: 'Verstappen', optionB: 'Someone else',
+          category: 'f1', emoji: '🏎️', expiresAt: expires(72)
+        });
+        predictions.push({
+          question: `Safety Car at the ${name}?`,
+          optionA: 'YES', optionB: 'NO',
+          category: 'f1', emoji: '🏎️', expiresAt: expires(72)
+        });
+      }
+    }
+  } catch (e) {
+    console.error('F1 API error:', e.message);
+  }
+
+  if (predictions.length === 0) {
+    const pools = [
+      { question: 'Verstappen winning the next Grand Prix?', optionA: 'YES', optionB: 'NO' },
+      { question: 'Hamilton regretting Ferrari before end of season?', optionA: 'YES', optionB: 'NO' },
+      { question: 'Leclerc winning at Monaco?', optionA: 'YES', optionB: 'NO' },
+      { question: 'Who finishes higher in the championship?', optionA: 'Red Bull', optionB: 'Ferrari' },
+      { question: 'McLaren becoming a serious title contender?', optionA: 'YES', optionB: 'NO' },
+    ];
+    predictions.push(...pools.map(p => ({ ...p, category: 'f1', emoji: '🏎️', expiresAt: expires(72) })));
+  }
+  return pickRandom(predictions, 1);
+}
+
+// --- NFL PREDICTIONS (LIVE API) ---
+async function generateNFLPredictions() {
+  const predictions = [];
+
+  try {
+    if (!FOOTBALL_API_KEY) throw new Error('No API key');
+
+    const today = new Date().toISOString().split('T')[0];
+    const url = `https://v1.american-football.api-sports.io/games?date=${today}`;
+    const res = await fetch(url, { headers: { 'x-apisports-key': FOOTBALL_API_KEY } });
+    const data = await res.json();
+
+    if (data.response && data.response.length > 0) {
+      const nflGames = data.response.filter(g => g.league?.name?.includes('NFL'));
+      for (const game of nflGames.slice(0, 3)) {
+        const home = game.teams.home.name;
+        const away = game.teams.away.name;
+        predictions.push({
+          question: `NFL: ${home} vs ${away} — Who wins?`,
+          optionA: home, optionB: away,
+          category: 'nfl', emoji: '🏈', expiresAt: expires(24)
+        });
+      }
+    }
+  } catch (e) {
+    console.error('NFL API error:', e.message);
+  }
+
+  if (predictions.length === 0) {
+    const pools = [
+      { question: 'Patrick Mahomes winning another Super Bowl?', optionA: 'YES', optionB: 'NO' },
+      { question: 'Best QB in the NFL right now?', optionA: 'Mahomes', optionB: 'Josh Allen' },
+      { question: 'A rookie QB leading his team to playoffs?', optionA: 'YES', optionB: 'NO' },
+      { question: 'Cowboys making a deep playoff run this year?', optionA: 'YES', optionB: 'NO' },
+      { question: 'NFL or NBA: bigger global audience by 2027?', optionA: 'NFL', optionB: 'NBA' },
+    ];
+    predictions.push(...pools.map(p => ({ ...p, category: 'nfl', emoji: '🏈', expiresAt: expires(72) })));
+  }
+
+  return pickRandom(predictions, 1);
+}
+
+// --- HOCKEY / NHL PREDICTIONS (LIVE API) ---
+async function generateHockeyPredictions() {
+  const predictions = [];
+
+  try {
+    if (!FOOTBALL_API_KEY) throw new Error('No API key');
+
+    const today = new Date().toISOString().split('T')[0];
+    const url = `https://v1.hockey.api-sports.io/games?date=${today}`;
+    const res = await fetch(url, { headers: { 'x-apisports-key': FOOTBALL_API_KEY } });
+    const data = await res.json();
+
+    if (data.response && data.response.length > 0) {
+      const nhlGames = data.response.filter(g => g.league?.name?.includes('NHL'));
+      for (const game of nhlGames.slice(0, 3)) {
+        const home = game.teams.home.name;
+        const away = game.teams.away.name;
+        predictions.push({
+          question: `NHL: ${home} vs ${away} — Who wins?`,
+          optionA: home, optionB: away,
+          category: 'hockey', emoji: '🏒', expiresAt: expires(24)
+        });
+      }
+    }
+  } catch (e) {
+    console.error('Hockey API error:', e.message);
+  }
+
+  if (predictions.length === 0) {
+    const pools = [
+      { question: 'Connor McDavid winning the Hart Trophy again?', optionA: 'YES', optionB: 'NO' },
+      { question: 'A Canadian team winning the Stanley Cup?', optionA: 'YES', optionB: 'NO' },
+      { question: 'Over 7 goals in tonight\'s biggest NHL game?', optionA: 'YES', optionB: 'NO' },
+    ];
+    predictions.push(...pools.map(p => ({ ...p, category: 'hockey', emoji: '🏒', expiresAt: expires(72) })));
+  }
+
+  return pickRandom(predictions, 1);
+}
+
+// --- RUGBY PREDICTIONS (LIVE API) ---
+async function generateRugbyPredictions() {
+  const predictions = [];
+
+  try {
+    if (!FOOTBALL_API_KEY) throw new Error('No API key');
+
+    const today = new Date().toISOString().split('T')[0];
+    const url = `https://v1.rugby.api-sports.io/games?date=${today}`;
+    const res = await fetch(url, { headers: { 'x-apisports-key': FOOTBALL_API_KEY } });
+    const data = await res.json();
+
+    if (data.response && data.response.length > 0) {
+      for (const game of data.response.slice(0, 3)) {
+        const home = game.teams.home.name;
+        const away = game.teams.away.name;
+        predictions.push({
+          question: `Rugby: ${home} vs ${away} — Who wins?`,
+          optionA: home, optionB: away,
+          category: 'rugby', emoji: '🏉', expiresAt: expires(24)
+        });
+      }
+    }
+  } catch (e) {
+    console.error('Rugby API error:', e.message);
+  }
+
+  if (predictions.length === 0) {
+    const pools = [
+      { question: 'New Zealand winning the next Rugby World Cup?', optionA: 'YES', optionB: 'NO' },
+      { question: 'Best rugby nation in the world?', optionA: 'New Zealand', optionB: 'South Africa' },
+      { question: 'A record score in the Six Nations this year?', optionA: 'YES', optionB: 'NO' },
+    ];
+    predictions.push(...pools.map(p => ({ ...p, category: 'rugby', emoji: '🏉', expiresAt: expires(72) })));
+  }
+
+  return pickRandom(predictions, 1);
 }
 
 // --- MUSIC ---
@@ -320,6 +543,9 @@ async function generateDailyPredictions() {
     generateNBAPredictions(),
     generateCombatPredictions(),
     generateF1Predictions(),
+    generateNFLPredictions(),
+    generateHockeyPredictions(),
+    generateRugbyPredictions(),
     generateMusiquePredictions(),
     generateGamingPredictions(),
     generateCinemaPredictions(),
