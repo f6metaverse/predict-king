@@ -81,6 +81,39 @@ function getCryptoFallbacks() {
   ];
 }
 
+// --- CRYPTO NEWS PREDICTIONS ---
+async function generateCryptoNewsPredictions() {
+  const predictions = [];
+
+  try {
+    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
+
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=business&q=crypto%20OR%20bitcoin%20OR%20ethereum`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.results && data.results.length > 0) {
+      for (const article of data.results.slice(0, 3)) {
+        if (article.title && article.title.length > 15) {
+          const title = article.title.slice(0, 75);
+          predictions.push({
+            question: `"${title}" — Bullish or bearish for crypto?`,
+            optionA: '🟢 Bullish',
+            optionB: '🔴 Bearish',
+            category: 'crypto',
+            emoji: '📰',
+            expiresAt: expires(48)
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Crypto News API error:', e.message);
+  }
+
+  return pickRandom(predictions, 1);
+}
+
 // --- FOOTBALL PREDICTIONS ---
 async function generateFootballPredictions() {
   const predictions = [];
@@ -539,6 +572,7 @@ async function generateDailyPredictions() {
 
   const results = await Promise.allSettled([
     generateCryptoPredictions(),
+    generateCryptoNewsPredictions(),
     generateFootballPredictions(),
     generateNBAPredictions(),
     generateCombatPredictions(),
