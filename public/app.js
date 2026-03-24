@@ -453,6 +453,23 @@ function loadInvite() {
   });
 }
 
+// --- In-App Interstitial (auto ads, passive revenue) ---
+function startAutoAds() {
+  if (typeof show_10775336 === 'function') {
+    show_10775336({
+      type: 'inApp',
+      inAppSettings: {
+        frequency: 2,
+        capping: 0.1,
+        interval: 30,
+        timeout: 5,
+        everyPage: false
+      }
+    });
+  }
+}
+setTimeout(startAutoAds, 8000);
+
 // --- Rewarded Ad ---
 function setupAdButton() {
   const btn = document.getElementById('watchAdBtn');
