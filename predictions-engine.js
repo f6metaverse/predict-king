@@ -65,7 +65,7 @@ async function generateCryptoPredictions() {
     predictions.push(...getCryptoFallbacks());
   }
 
-  return pickRandom(predictions, 3);
+  return pickRandom(predictions, 5);
 }
 
 function getCryptoFallbacks() {
@@ -111,7 +111,7 @@ async function generateCryptoNewsPredictions() {
     console.error('Crypto News API error:', e.message);
   }
 
-  return pickRandom(predictions, 1);
+  return pickRandom(predictions, 2);
 }
 
 // --- FOOTBALL PREDICTIONS ---
@@ -167,7 +167,7 @@ async function generateFootballPredictions() {
   }
 
   if (predictions.length === 0) predictions.push(...getFootballFallbacks());
-  return pickRandom(predictions, 3);
+  return pickRandom(predictions, 5);
 }
 
 function getFootballFallbacks() {
@@ -233,7 +233,7 @@ async function generateNBAPredictions() {
     predictions.push(...pools.map(p => ({ ...p, category: 'nba', emoji: '🏀', expiresAt: expires(48) })));
   }
 
-  return pickRandom(predictions, 2);
+  return pickRandom(predictions, 3);
 }
 
 // --- UFC / COMBAT (LIVE API) ---
@@ -279,7 +279,7 @@ async function generateCombatPredictions() {
     predictions.push(...pools.map(p => ({ ...p, category: 'combat', emoji: '🥊', expiresAt: expires(72) })));
   }
 
-  return pickRandom(predictions, 1);
+  return pickRandom(predictions, 2);
 }
 
 // --- F1 (LIVE API) ---
@@ -322,7 +322,7 @@ async function generateF1Predictions() {
     ];
     predictions.push(...pools.map(p => ({ ...p, category: 'f1', emoji: '🏎️', expiresAt: expires(72) })));
   }
-  return pickRandom(predictions, 1);
+  return pickRandom(predictions, 2);
 }
 
 // --- NFL PREDICTIONS (LIVE API) ---
@@ -364,7 +364,7 @@ async function generateNFLPredictions() {
     predictions.push(...pools.map(p => ({ ...p, category: 'nfl', emoji: '🏈', expiresAt: expires(72) })));
   }
 
-  return pickRandom(predictions, 1);
+  return pickRandom(predictions, 2);
 }
 
 // --- HOCKEY / NHL PREDICTIONS (LIVE API) ---
@@ -404,7 +404,7 @@ async function generateHockeyPredictions() {
     predictions.push(...pools.map(p => ({ ...p, category: 'hockey', emoji: '🏒', expiresAt: expires(72) })));
   }
 
-  return pickRandom(predictions, 1);
+  return pickRandom(predictions, 2);
 }
 
 // --- RUGBY PREDICTIONS (LIVE API) ---
@@ -484,7 +484,7 @@ async function generateMusiquePredictions() {
   ];
   predictions.push(...fallbacks.map(p => ({ ...p, category: 'musique', emoji: '🎵', expiresAt: expires(96) })));
 
-  return pickRandom(predictions, 2);
+  return pickRandom(predictions, 3);
 }
 
 // --- GAMING (LIVE NEWS + FALLBACK) ---
@@ -522,7 +522,7 @@ async function generateGamingPredictions() {
   ];
   predictions.push(...fallbacks.map(p => ({ ...p, category: 'gaming', emoji: '🎮', expiresAt: expires(96) })));
 
-  return pickRandom(predictions, 1);
+  return pickRandom(predictions, 2);
 }
 
 // --- CINEMA & SERIES (LIVE NEWS + FALLBACK) ---
@@ -559,7 +559,7 @@ async function generateCinemaPredictions() {
   ];
   predictions.push(...fallbacks.map(p => ({ ...p, category: 'cinema', emoji: '🎬', expiresAt: expires(96) })));
 
-  return pickRandom(predictions, 1);
+  return pickRandom(predictions, 2);
 }
 
 // --- DRAMA & BUZZ (LIVE NEWS + FALLBACK) ---
@@ -597,7 +597,7 @@ async function generateDramaPredictions() {
   ];
   predictions.push(...fallbacks.map(p => ({ ...p, category: 'drama', emoji: '👀', expiresAt: expires(72) })));
 
-  return pickRandom(predictions, 1);
+  return pickRandom(predictions, 2);
 }
 
 // --- POLITICS (LIVE NEWS) ---
@@ -633,7 +633,7 @@ async function generatePoliticsPredictions() {
   ];
   predictions.push(...fallbacks.map(p => ({ ...p, category: 'politics', emoji: '🏛️', expiresAt: expires(96) })));
 
-  return pickRandom(predictions, 1);
+  return pickRandom(predictions, 2);
 }
 
 // --- WORLD / GEOPOLITICS (LIVE NEWS) ---
@@ -668,7 +668,7 @@ async function generateWorldPredictions() {
   ];
   predictions.push(...fallbacks.map(p => ({ ...p, category: 'world', emoji: '🌍', expiresAt: expires(96) })));
 
-  return pickRandom(predictions, 1);
+  return pickRandom(predictions, 2);
 }
 
 // --- SCIENCE & SPACE (LIVE NEWS) ---
@@ -704,7 +704,7 @@ async function generateSciencePredictions() {
   ];
   predictions.push(...fallbacks.map(p => ({ ...p, category: 'science', emoji: '🔬', expiresAt: expires(96) })));
 
-  return pickRandom(predictions, 1);
+  return pickRandom(predictions, 2);
 }
 
 // --- HEALTH & FITNESS (LIVE NEWS) ---
@@ -740,7 +740,7 @@ async function generateHealthPredictions() {
   ];
   predictions.push(...fallbacks.map(p => ({ ...p, category: 'health', emoji: '💪', expiresAt: expires(96) })));
 
-  return pickRandom(predictions, 1);
+  return pickRandom(predictions, 2);
 }
 
 // --- NEWS-BASED PREDICTIONS ---
