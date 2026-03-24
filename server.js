@@ -4,6 +4,7 @@ const path = require('path');
 const TelegramBot = require('node-telegram-bot-api');
 const db = require('./db');
 const { startScheduler, generateDailyPredictions } = require('./predictions-engine');
+const { startResolveScheduler } = require('./auto-resolve');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -219,6 +220,7 @@ async function initPredictions() {
     await generateDailyPredictions();
   }
   startScheduler();
+  startResolveScheduler();
 }
 
 // --- Telegram Bot Commands ---
