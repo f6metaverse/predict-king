@@ -101,6 +101,42 @@ app.post('/api/user', (req, res) => {
   res.json(user);
 });
 
+// Daily bonus
+app.post('/api/daily-bonus', (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+  const user = db.getUser(userId);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const today = new Date().toDateString();
+  const lastBonus = user.lastBonusDate;
+
+  if (lastBonus === today) {
+    return res.json({ success: false, message: 'Already claimed today' });
+  }
+
+  // Check if yesterday was last bonus (for streak)
+  const yesterday = new Date(Date.now() - 86400000).toDateString();
+  const bonusStreak = lastBonus === yesterday ? (user.bonusStreak || 0) + 1 : 1;
+
+  // More streak = more bonus (10 base + 5 per streak day, max 50)
+  const bonus = Math.min(10 + (bonusStreak * 5), 50);
+
+  const updated = db.createOrUpdateUser(userId, {
+    points: (user.points || 0) + bonus,
+    lastBonusDate: today,
+    bonusStreak: bonusStreak
+  });
+
+  res.json({
+    success: true,
+    bonus,
+    points: updated.points,
+    streak: bonusStreak
+  });
+});
+
 // Leaderboard
 app.get('/api/leaderboard', (req, res) => {
   const leaderboard = db.getLeaderboard(50);

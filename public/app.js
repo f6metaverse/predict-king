@@ -4,7 +4,7 @@ let currentUser = null;
 let currentCategory = 'all';
 
 // Init
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   if (tg) {
     tg.ready();
     tg.expand();
@@ -12,10 +12,11 @@ document.addEventListener('DOMContentLoaded', () => {
     tg.setBackgroundColor('#0a0a0f');
   }
 
-  initUser();
+  await initUser();
   setupTabs();
   setupCategories();
   loadPredictions();
+  checkDailyBonus();
 });
 
 // --- User ---
@@ -172,6 +173,7 @@ function renderPrediction(p) {
           <span class="result-label-b">${hasVoted ? p.percentB + '%' : ''} ${p.optionB}</span>
         </div>
         <p class="total-votes">${hasVoted ? p.totalVotes + ' votes' : ''}</p>
+        ${hasVoted ? `<button class="share-btn" data-question="${encodeURIComponent(p.question)}" data-choice="${p.userVote === 'A' ? p.optionA : p.optionB}" data-percent="${p.userVote === 'A' ? p.percentA : p.percentB}">📤 Partager ma prediction</button>` : ''}
       </div>
     </div>`;
 }
@@ -244,9 +246,87 @@ async function vote(predictionId, choice) {
     btnA.replaceWith(btnA.cloneNode(true));
     btnB.replaceWith(btnB.cloneNode(true));
 
+    // Attach share listeners
+    attachShareListeners();
+
   } catch (e) {
     console.error('Vote failed:', e);
   }
+}
+
+// --- Share ---
+function attachShareListeners() {
+  document.querySelectorAll('.share-btn').forEach(btn => {
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+    newBtn.addEventListener('click', () => {
+      const question = decodeURIComponent(newBtn.dataset.question);
+      const choice = newBtn.dataset.choice;
+      const percent = newBtn.dataset.percent;
+      sharePrediction(question, choice, percent);
+    });
+  });
+}
+
+function sharePrediction(question, choice, percent) {
+  if (tg) tg.HapticFeedback?.impactOccurred('light');
+
+  const text = `👑 PREDICT KING\n\n🔮 ${question}\n\n✅ J'ai vote: ${choice} (${percent}% d'accord)\n\nEt toi, t'en penses quoi ? Viens voter !`;
+  const url = `https://t.me/PredictKingAppBot`;
+
+  if (tg) {
+    tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`);
+  } else {
+    navigator.clipboard?.writeText(text + '\n' + url);
+    alert('Copie !');
+  }
+}
+
+// --- Daily Bonus ---
+async function checkDailyBonus() {
+  if (!currentUser?.id) return;
+
+  const lastBonus = localStorage.getItem(`pk_daily_${currentUser.id}`);
+  const today = new Date().toDateString();
+
+  if (lastBonus !== today) {
+    try {
+      const res = await fetch('/api/daily-bonus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: currentUser.id })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        localStorage.setItem(`pk_daily_${currentUser.id}`, today);
+        currentUser.points = data.points;
+        currentUser.streak = data.streak;
+        updateHeaderStats();
+        showDailyPopup(data.bonus, data.streak);
+      }
+    } catch (e) {
+      console.error('Daily bonus error:', e);
+    }
+  }
+}
+
+function showDailyPopup(bonus, streak) {
+  const popup = document.createElement('div');
+  popup.className = 'daily-popup';
+  popup.innerHTML = `
+    <div class="daily-popup-content">
+      <div class="daily-emoji">🎁</div>
+      <h3>Bonus quotidien !</h3>
+      <p class="daily-points">+${bonus} points</p>
+      <p class="daily-streak">🔥 Streak : ${streak} jour${streak > 1 ? 's' : ''}</p>
+      <p class="daily-tip">Reviens demain pour encore plus !</p>
+      <button class="daily-close" onclick="this.parentElement.parentElement.remove()">C'est parti !</button>
+    </div>
+  `;
+  document.getElementById('app').appendChild(popup);
+
+  if (tg) tg.HapticFeedback?.notificationOccurred('success');
 }
 
 // --- Leaderboard ---
