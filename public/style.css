@@ -842,6 +842,42 @@ body::before {
   pointer-events: none;
 }
 
+/* --- Ad Reward Button --- */
+.ad-reward-bar {
+  margin-bottom: 14px;
+}
+
+.ad-reward-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, var(--gold-dark), var(--gold));
+  border: none;
+  border-radius: 14px;
+  color: #000;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 15px var(--gold-glow);
+}
+
+.ad-reward-btn:active {
+  transform: scale(0.97);
+}
+
+.ad-reward-btn:disabled {
+  opacity: 0.6;
+}
+
+.ad-icon {
+  font-size: 20px;
+}
+
 /* --- Comments --- */
 .comments-section {
   margin-top: 12px;

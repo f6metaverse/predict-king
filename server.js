@@ -235,6 +235,27 @@ app.post('/api/predictions', async (req, res) => {
   }
 });
 
+// Ad reward
+app.post('/api/ad-reward', async (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+  try {
+    const user = await db.getUser(userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const updated = await db.createOrUpdateUser(userId, {
+      ...user,
+      points: (user.points || 0) + 5
+    });
+
+    res.json({ success: true, points: updated.points });
+  } catch (e) {
+    console.error('Ad reward error:', e.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Force regenerate predictions (admin)
 app.post('/api/generate', async (req, res) => {
   try {

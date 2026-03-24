@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupCategories();
   loadPredictions();
   checkDailyBonus();
+  setupAdButton();
 });
 
 // --- User ---
@@ -449,6 +450,67 @@ function loadInvite() {
     }
 
     if (tg) tg.HapticFeedback?.impactOccurred('medium');
+  });
+}
+
+// --- Rewarded Ad ---
+function setupAdButton() {
+  const btn = document.getElementById('watchAdBtn');
+  if (!btn) return;
+
+  btn.addEventListener('click', async () => {
+    if (!currentUser) return;
+
+    // Check cooldown (1 ad per 3 minutes)
+    const lastAd = localStorage.getItem(`pk_ad_${currentUser.id}`);
+    const now = Date.now();
+    if (lastAd && now - parseInt(lastAd) < 180000) {
+      const wait = Math.ceil((180000 - (now - parseInt(lastAd))) / 1000);
+      btn.querySelector('span:last-child').innerHTML = `Wait ${wait}s...`;
+      setTimeout(() => {
+        btn.querySelector('span:last-child').innerHTML = 'Watch ad = <strong>+5 points</strong>';
+      }, 2000);
+      return;
+    }
+
+    btn.disabled = true;
+    btn.querySelector('span:last-child').innerHTML = 'Loading ad...';
+
+    try {
+      if (typeof show_10775336 === 'function') {
+        await show_10775336();
+        // Ad watched successfully, reward the user
+        const res = await fetch('/api/ad-reward', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: currentUser.id })
+        });
+        const data = await res.json();
+        if (data.success) {
+          currentUser.points = data.points;
+          updateHeaderStats();
+          localStorage.setItem(`pk_ad_${currentUser.id}`, now.toString());
+          btn.querySelector('span:last-child').innerHTML = '<strong>+5 points!</strong>';
+          if (tg) tg.HapticFeedback?.notificationOccurred('success');
+          setTimeout(() => {
+            btn.querySelector('span:last-child').innerHTML = 'Watch ad = <strong>+5 points</strong>';
+          }, 2000);
+        }
+      } else {
+        btn.querySelector('span:last-child').innerHTML = 'Ad not available';
+        setTimeout(() => {
+          btn.querySelector('span:last-child').innerHTML = 'Watch ad = <strong>+5 points</strong>';
+        }, 2000);
+      }
+    } catch (e) {
+      console.error('Ad error:', e);
+      btn.querySelector('span:last-child').innerHTML = 'Try again later';
+      setTimeout(() => {
+        btn.querySelector('span:last-child').innerHTML = 'Watch ad = <strong>+5 points</strong>';
+      }, 2000);
+    }
+
+    btn.disabled = false;
   });
 }
 
