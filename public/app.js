@@ -98,7 +98,7 @@ function setupCategories() {
 // --- Predictions ---
 async function loadPredictions() {
   const list = document.getElementById('predictionsList');
-  list.innerHTML = '<div class="loading"><div class="spinner"></div><p>Chargement...</p></div>';
+  list.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading...</p></div>';
 
   try {
     const userId = currentUser?.id || '';
@@ -113,7 +113,7 @@ async function loadPredictions() {
       list.innerHTML = `
         <div class="empty-state">
           <div class="emoji">🔮</div>
-          <p>Pas de predictions pour le moment</p>
+          <p>No predictions yet</p>
         </div>`;
       return;
     }
@@ -122,7 +122,7 @@ async function loadPredictions() {
     attachVoteListeners();
   } catch (e) {
     console.error('Failed to load predictions:', e);
-    list.innerHTML = '<div class="empty-state"><p>Erreur de chargement</p></div>';
+    list.innerHTML = '<div class="empty-state"><p>Failed to load</p></div>';
   }
 }
 
@@ -134,9 +134,9 @@ function renderPrediction(p) {
     combat: '🥊 Combat',
     f1: '🏎️ F1',
     crypto: '₿ Crypto',
-    musique: '🎵 Musique',
+    musique: '🎵 Music',
     gaming: '🎮 Gaming',
-    cinema: '🎬 Cinema',
+    cinema: '🎬 Movies',
     drama: '👀 Drama',
     trending: '🔥 Trending',
     general: '🔮 General'
@@ -173,7 +173,7 @@ function renderPrediction(p) {
           <span class="result-label-b">${hasVoted ? p.percentB + '%' : ''} ${p.optionB}</span>
         </div>
         <p class="total-votes">${hasVoted ? p.totalVotes + ' votes' : ''}</p>
-        ${hasVoted ? `<button class="share-btn" data-question="${encodeURIComponent(p.question)}" data-choice="${p.userVote === 'A' ? p.optionA : p.optionB}" data-percent="${p.userVote === 'A' ? p.percentA : p.percentB}">📤 Partager ma prediction</button>` : ''}
+        ${hasVoted ? `<button class="share-btn" data-question="${encodeURIComponent(p.question)}" data-choice="${p.userVote === 'A' ? p.optionA : p.optionB}" data-percent="${p.userVote === 'A' ? p.percentA : p.percentB}">📤 Share my prediction</button>` : ''}
       </div>
     </div>`;
 }
@@ -271,14 +271,14 @@ function attachShareListeners() {
 function sharePrediction(question, choice, percent) {
   if (tg) tg.HapticFeedback?.impactOccurred('light');
 
-  const text = `👑 PREDICT KING\n\n🔮 ${question}\n\n✅ J'ai vote: ${choice} (${percent}% d'accord)\n\nEt toi, t'en penses quoi ? Viens voter !`;
+  const text = `👑 PREDICT KING\n\n🔮 ${question}\n\n✅ I voted: ${choice} (${percent}% agree)\n\nWhat do you think? Come vote!`;
   const url = `https://t.me/PredictKingAppBot`;
 
   if (tg) {
     tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`);
   } else {
     navigator.clipboard?.writeText(text + '\n' + url);
-    alert('Copie !');
+    alert('Link copied!');
   }
 }
 
@@ -317,11 +317,11 @@ function showDailyPopup(bonus, streak) {
   popup.innerHTML = `
     <div class="daily-popup-content">
       <div class="daily-emoji">🎁</div>
-      <h3>Bonus quotidien !</h3>
+      <h3>Daily Bonus!</h3>
       <p class="daily-points">+${bonus} points</p>
-      <p class="daily-streak">🔥 Streak : ${streak} jour${streak > 1 ? 's' : ''}</p>
-      <p class="daily-tip">Reviens demain pour encore plus !</p>
-      <button class="daily-close" onclick="this.parentElement.parentElement.remove()">C'est parti !</button>
+      <p class="daily-streak">🔥 Streak: ${streak} day${streak > 1 ? 's' : ''}</p>
+      <p class="daily-tip">Come back tomorrow for even more!</p>
+      <button class="daily-close" onclick="this.parentElement.parentElement.remove()">Let's go!</button>
     </div>
   `;
   document.getElementById('app').appendChild(popup);
@@ -339,7 +339,7 @@ async function loadLeaderboard() {
     const users = await res.json();
 
     if (users.length === 0) {
-      list.innerHTML = '<div class="empty-state"><div class="emoji">🏆</div><p>Pas encore de joueurs</p></div>';
+      list.innerHTML = '<div class="empty-state"><div class="emoji">🏆</div><p>No players yet</p></div>';
       return;
     }
 
@@ -348,14 +348,14 @@ async function loadLeaderboard() {
       <div class="lb-item ${i < 3 ? 'top-' + (i + 1) : ''}" style="animation-delay: ${i * 0.05}s">
         <span class="lb-rank ${i >= 3 ? 'num' : ''}">${medals[i] || (i + 1)}</span>
         <div class="lb-info">
-          <div class="lb-name">${u.firstName}${u.id === currentUser?.id ? ' (toi)' : ''}</div>
+          <div class="lb-name">${u.firstName}${u.id === currentUser?.id ? ' (you)' : ''}</div>
           <div class="lb-stats">🔥 ${u.streak || 0} streak | ✅ ${u.correctPredictions || 0} correctes</div>
         </div>
         <span class="lb-points">⭐ ${u.points}</span>
       </div>
     `).join('');
   } catch (e) {
-    list.innerHTML = '<div class="empty-state"><p>Erreur de chargement</p></div>';
+    list.innerHTML = '<div class="empty-state"><p>Failed to load</p></div>';
   }
 }
 
@@ -397,7 +397,7 @@ function getRank(points) {
   if (points >= 1000) return '🏆 Gold';
   if (points >= 500) return '🥈 Silver';
   if (points >= 100) return '🥉 Bronze';
-  return '🆕 Debutant';
+  return '🆕 Rookie';
 }
 
 // --- Invite ---
@@ -414,7 +414,7 @@ function loadInvite() {
 
   newBtn.addEventListener('click', () => {
     const link = `https://t.me/PredictKingAppBot?start=${currentUser.id}`;
-    const text = `👑 Rejoins PREDICT KING ! Fais tes predictions sur le sport, la crypto et la pop culture. Gagne des points et deviens le roi des predictions !\n\n🎮 Joue maintenant :`;
+    const text = `👑 Join PREDICT KING! Make predictions on sports, crypto & pop culture. Earn points and become the prediction king!\n\n🎮 Play now:`;
 
     if (tg) {
       tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`);

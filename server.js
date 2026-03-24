@@ -201,6 +201,16 @@ app.post('/api/generate', async (req, res) => {
   res.json({ success: true, generated: count });
 });
 
+// Reset predictions (admin - clears all and regenerates fresh)
+app.post('/api/reset-predictions', async (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  fs.writeFileSync(path.join(__dirname, 'data', 'predictions.json'), '[]');
+  fs.writeFileSync(path.join(__dirname, 'data', 'votes.json'), '{}');
+  const count = await generateDailyPredictions();
+  res.json({ success: true, generated: count });
+});
+
 // --- Auto-generate predictions on startup ---
 async function initPredictions() {
   const existing = db.getActivePredictions();
@@ -234,17 +244,17 @@ bot.onText(/\/start(.*)/, (msg, match) => {
   }
 
   bot.sendMessage(chatId,
-    `👑 *PREDICT KING* 👑\n\nBienvenue ${msg.from.first_name} !\n\n🔮 Fais tes prédictions sur le sport, la crypto, la pop culture...\n🏆 Gagne des points et grimpe le classement\n🔥 Garde ta streak pour des bonus\n👥 Invite tes amis pour des points bonus\n\nClique ci-dessous pour jouer !`,
+    `👑 *PREDICT KING* 👑\n\nWelcome ${msg.from.first_name}!\n\n🔮 Make predictions on sports, crypto, pop culture...\n🏆 Earn points and climb the leaderboard\n🔥 Keep your streak for bonus points\n👥 Invite friends for bonus points\n\nTap below to play!`,
     {
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [[
-          { text: '🎮 Jouer', web_app: { url: APP_URL } }
+          { text: '🎮 Play', web_app: { url: APP_URL } }
         ], [
-          { text: '📊 Mon profil', callback_data: 'profile' },
-          { text: '🏆 Classement', callback_data: 'leaderboard' }
+          { text: '📊 My Profile', callback_data: 'profile' },
+          { text: '🏆 Leaderboard', callback_data: 'leaderboard' }
         ], [
-          { text: '👥 Inviter un ami', callback_data: 'invite' }
+          { text: '👥 Invite a friend', callback_data: 'invite' }
         ]]
       }
     }
@@ -258,11 +268,11 @@ bot.on('callback_query', async (query) => {
   if (query.data === 'profile') {
     const user = db.getUser(userId);
     if (!user) {
-      bot.answerCallbackQuery(query.id, { text: 'Joue d\'abord !' });
+      bot.answerCallbackQuery(query.id, { text: 'Play first!' });
       return;
     }
     bot.sendMessage(chatId,
-      `👤 *${user.firstName}*\n\n⭐ Points: ${user.points}\n🔥 Streak: ${user.streak}\n🏆 Meilleure streak: ${user.bestStreak}\n📊 Predictions: ${user.totalPredictions}\n✅ Correctes: ${user.correctPredictions}\n👥 Parrainages: ${user.referralCount}`,
+      `👤 *${user.firstName}*\n\n⭐ Points: ${user.points}\n🔥 Streak: ${user.streak}\n🏆 Best streak: ${user.bestStreak}\n📊 Predictions: ${user.totalPredictions}\n✅ Correct: ${user.correctPredictions}\n👥 Referrals: ${user.referralCount}`,
       { parse_mode: 'Markdown' }
     );
   }
@@ -270,7 +280,7 @@ bot.on('callback_query', async (query) => {
   if (query.data === 'leaderboard') {
     const top = db.getLeaderboard(10);
     if (top.length === 0) {
-      bot.sendMessage(chatId, 'Pas encore de joueurs !');
+      bot.sendMessage(chatId, 'No players yet!');
       return;
     }
     const medals = ['🥇', '🥈', '🥉'];
@@ -283,7 +293,7 @@ bot.on('callback_query', async (query) => {
   if (query.data === 'invite') {
     const link = `https://t.me/PredictKingAppBot?start=${userId}`;
     bot.sendMessage(chatId,
-      `👥 *Invite tes amis !*\n\n🎁 Tu gagnes *50 points* par ami qui rejoint\n\nTon lien de parrainage :\n\`${link}\`\n\nPartage-le partout !`,
+      `👥 *Invite your friends!*\n\n🎁 You earn *50 points* for each friend who joins\n\nYour referral link:\n\`${link}\`\n\nShare it everywhere!`,
       { parse_mode: 'Markdown' }
     );
   }
