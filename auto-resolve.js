@@ -33,7 +33,14 @@ async function resolveByMajority() {
   for (const pred of preds) {
     if (pred.resolved) continue;
     if (new Date(pred.expiresAt) > now) continue;
-    if (pred.votesA + pred.votesB === 0) continue;
+
+    // No votes? Mark as resolved with no winner (free the slot)
+    if (pred.votesA + pred.votesB === 0) {
+      await db.resolvePrediction(pred.id, 'A');
+      resolved++;
+      console.log(`Expired with 0 votes: "${pred.question}" (slot freed)`);
+      continue;
+    }
 
     const result = pred.votesA >= pred.votesB ? 'A' : 'B';
     await db.resolvePrediction(pred.id, result);
@@ -188,13 +195,13 @@ async function resolveAll() {
   return total;
 }
 
-// --- SCHEDULER ---
+// --- SCHEDULER (every 30 min for faster turnover) ---
 function startResolveScheduler() {
-  console.log('Auto-resolve scheduler started');
+  console.log('Auto-resolve scheduler started (every 30 min)');
 
   setInterval(() => {
     resolveAll();
-  }, 60 * 60 * 1000);
+  }, 30 * 60 * 1000);
 
   setTimeout(() => {
     resolveAll();

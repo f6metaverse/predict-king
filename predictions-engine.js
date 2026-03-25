@@ -1,20 +1,507 @@
 const db = require('./db');
 
 // ============================================
-// PREDICT KING — AUTO-GENERATION ENGINE
-// International English version
+// PREDICT KING - AUTO-GENERATION ENGINE v2
+// Maximum LIVE content, smart API rotation
 // ============================================
 
 const FOOTBALL_API_KEY = process.env.FOOTBALL_API_KEY || '';
 const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY || '';
 const NEWS_API_KEY = process.env.NEWS_API_KEY || '';
 
-// --- CRYPTO PREDICTIONS ---
-async function generateCryptoPredictions() {
-  const predictions = [];
+// ============================================
+// DURATION CONFIG (in hours)
+// ============================================
+const DURATION = {
+  FLASH: 4,
+  SHORT: 6,
+  MEDIUM: 8,
+  SPORT_LIVE: 12,
+  NEWS: 12,
+  CRYPTO_PRICE: 8,
+  LONG: 24,
+  EVENT: 48
+};
 
+// Min active predictions per category
+const MIN_SLOTS = {
+  crypto: 3,
+  football: 2,
+  nba: 2,
+  combat: 1,
+  f1: 1,
+  nfl: 1,
+  hockey: 1,
+  rugby: 1,
+  musique: 2,
+  gaming: 2,
+  cinema: 2,
+  drama: 2,
+  politics: 2,
+  world: 1,
+  science: 1,
+  health: 1,
+  trending: 1,
+  debate: 2
+};
+
+// ============================================
+// ROTATION SYSTEM for API-Sports
+// Cycle through groups to spread API usage
+// ============================================
+let apiSportsCycleIndex = 0;
+
+const API_SPORTS_ROTATION = [
+  // Cycle 0: Football + NBA (most popular)
+  ['football', 'nba'],
+  // Cycle 1: Hockey + Combat
+  ['hockey', 'combat'],
+  // Cycle 2: Football + NFL
+  ['football', 'nfl'],
+  // Cycle 3: NBA + Rugby + F1
+  ['nba', 'rugby', 'f1'],
+  // Cycle 4: Football + Hockey
+  ['football', 'hockey'],
+  // Cycle 5: Combat + NFL + F1
+  ['combat', 'nfl', 'f1'],
+  // Cycle 6: Football + NBA (repeat popular)
+  ['football', 'nba'],
+  // Cycle 7: All minor sports catch-up
+  ['hockey', 'rugby', 'combat'],
+];
+
+// Rotation for NewsData categories
+let newsCycleIndex = 0;
+
+const NEWS_ROTATION = [
+  // Cycle 0: Crypto + Entertainment + Top
+  [
+    { category: 'business', q: 'crypto%20OR%20bitcoin%20OR%20ethereum', predCat: 'crypto', emoji: '📰' },
+    { category: 'entertainment', q: 'music%20OR%20album%20OR%20rapper%20OR%20singer%20OR%20spotify', predCat: 'musique', emoji: '🎵' },
+    { category: 'top', q: null, predCat: 'trending', emoji: '🔥' },
+  ],
+  // Cycle 1: Tech/Gaming + Politics + World
+  [
+    { category: 'technology', q: 'gaming%20OR%20playstation%20OR%20xbox%20OR%20GTA%20OR%20fortnite%20OR%20nintendo', predCat: 'gaming', emoji: '🎮' },
+    { category: 'politics', q: null, predCat: 'politics', emoji: '🏛' },
+    { category: 'world', q: null, predCat: 'world', emoji: '🌍' },
+  ],
+  // Cycle 2: Cinema + Science + Crypto
+  [
+    { category: 'entertainment', q: 'movie%20OR%20Netflix%20OR%20Disney%20OR%20Marvel%20OR%20series%20OR%20streaming', predCat: 'cinema', emoji: '🎬' },
+    { category: 'science', q: null, predCat: 'science', emoji: '🔬' },
+    { category: 'business', q: 'crypto%20OR%20bitcoin%20OR%20ethereum%20OR%20blockchain', predCat: 'crypto', emoji: '📰' },
+  ],
+  // Cycle 3: Drama/Tech + Health + Entertainment
+  [
+    { category: 'technology', q: 'AI%20OR%20Elon%20Musk%20OR%20Apple%20OR%20TikTok%20OR%20viral%20OR%20influencer', predCat: 'drama', emoji: '👀' },
+    { category: 'health', q: null, predCat: 'health', emoji: '💪' },
+    { category: 'entertainment', q: 'celebrity%20OR%20award%20OR%20viral%20OR%20trending', predCat: 'trending', emoji: '🔥' },
+  ],
+  // Cycle 4: Crypto + Music + Top news
+  [
+    { category: 'business', q: 'crypto%20OR%20bitcoin%20OR%20solana%20OR%20memecoin', predCat: 'crypto', emoji: '📰' },
+    { category: 'entertainment', q: 'concert%20OR%20Grammy%20OR%20rapper%20OR%20kpop%20OR%20album', predCat: 'musique', emoji: '🎵' },
+    { category: 'top', q: null, predCat: 'drama', emoji: '👀' },
+  ],
+  // Cycle 5: Gaming + World + Politics
+  [
+    { category: 'technology', q: 'esports%20OR%20Steam%20OR%20gaming%20OR%20VR%20OR%20console', predCat: 'gaming', emoji: '🎮' },
+    { category: 'world', q: null, predCat: 'world', emoji: '🌍' },
+    { category: 'politics', q: null, predCat: 'politics', emoji: '🏛' },
+  ],
+  // Cycle 6: Cinema + Drama + Science
+  [
+    { category: 'entertainment', q: 'box%20office%20OR%20anime%20OR%20series%20OR%20Netflix%20OR%20HBO', predCat: 'cinema', emoji: '🎬' },
+    { category: 'technology', q: 'startup%20OR%20viral%20OR%20controversy%20OR%20scandal', predCat: 'drama', emoji: '👀' },
+    { category: 'science', q: 'space%20OR%20NASA%20OR%20discovery%20OR%20breakthrough', predCat: 'science', emoji: '🔬' },
+  ],
+  // Cycle 7: Health + Trending + Crypto
+  [
+    { category: 'health', q: 'fitness%20OR%20mental%20health%20OR%20diet%20OR%20wellness', predCat: 'health', emoji: '💪' },
+    { category: 'top', q: null, predCat: 'trending', emoji: '🔥' },
+    { category: 'business', q: 'bitcoin%20OR%20ethereum%20OR%20crypto%20OR%20DeFi', predCat: 'crypto', emoji: '📰' },
+  ],
+];
+
+// Question formats to keep news-based predictions varied
+const NEWS_FORMATS = [
+  { suffix: ' — Will this matter in a week?', a: 'Big impact', b: 'Already forgotten' },
+  { suffix: ' — Agree or disagree?', a: 'Agree', b: 'Disagree' },
+  { suffix: ' — Good or bad news?', a: 'Good', b: 'Bad' },
+  { suffix: ' — Overhyped or underrated?', a: 'Overhyped', b: 'Underrated' },
+  { suffix: ' — W or L?', a: 'Massive W', b: 'Huge L' },
+  { suffix: ' — Hit or miss?', a: 'Hit', b: 'Miss' },
+  { suffix: ' — Real deal or just noise?', a: 'Real deal', b: 'Just noise' },
+  { suffix: ' — Bullish or bearish?', a: 'Bullish', b: 'Bearish' },
+];
+
+// ============================================
+// OPINION BACKUP POOLS (for when APIs fail)
+// ============================================
+const OPINION_POOLS = {
+  crypto: [
+    { question: 'Bitcoin to $150K before end of year?', optionA: 'Absolutely', optionB: 'No way', emoji: '₿' },
+    { question: 'Is Solana the Ethereum killer?', optionA: 'SOL wins', optionB: 'ETH forever', emoji: '⚡' },
+    { question: 'Memecoins: genius or gambling?', optionA: 'Genius plays', optionB: 'Pure gambling', emoji: '🐸' },
+    { question: 'Best long-term hold?', optionA: 'Bitcoin', optionB: 'Ethereum', emoji: '💰' },
+    { question: 'NFTs making a comeback?', optionA: 'Comeback loading', optionB: 'Dead forever', emoji: '🖼' },
+    { question: 'DOGE or SHIB: which survives longer?', optionA: 'DOGE', optionB: 'SHIB', emoji: '🐕' },
+    { question: 'Crypto winter coming again?', optionA: 'Winter is here', optionB: 'Bull run continues', emoji: '❄' },
+    { question: 'Best exchange right now?', optionA: 'Binance', optionB: 'Bybit', emoji: '📈' },
+    { question: 'AI + Crypto tokens: legit or scam?', optionA: 'Next big thing', optionB: 'Mostly scams', emoji: '🤖' },
+    { question: 'Layer 2s killing Layer 1s?', optionA: 'L2 is the future', optionB: 'L1 stays king', emoji: '🔗' },
+  ],
+  football: [
+    { question: 'Best player in the world right now?', optionA: 'Haaland', optionB: 'Mbappe', emoji: '⚽' },
+    { question: 'Messi the GOAT or Ronaldo?', optionA: 'Messi', optionB: 'Ronaldo', emoji: '🐐' },
+    { question: 'Real Madrid winning another UCL?', optionA: 'Obviously', optionB: 'Not this time', emoji: '🏆' },
+    { question: 'Best young talent in football?', optionA: 'Lamine Yamal', optionB: 'Bellingham', emoji: '⭐' },
+    { question: 'VAR: good or bad for football?', optionA: 'Good', optionB: 'Ruining it', emoji: '📺' },
+    { question: 'Who wins the World Cup 2026?', optionA: 'France', optionB: 'Argentina', emoji: '🏆' },
+    { question: 'Saudi League becoming top 5?', optionA: 'In 5 years yes', optionB: 'Never serious', emoji: '🇸🇦' },
+    { question: 'Best manager alive?', optionA: 'Guardiola', optionB: 'Ancelotti', emoji: '🧠' },
+  ],
+  nba: [
+    { question: 'Best player in the NBA?', optionA: 'Wembanyama', optionB: 'Jokic', emoji: '🏀' },
+    { question: 'LeBron top 1 all time?', optionA: 'GOAT', optionB: 'MJ first', emoji: '🏀' },
+    { question: 'Steph Curry: greatest shooter ever?', optionA: 'No debate', optionB: 'Overrated take', emoji: '🎯' },
+    { question: 'Lakers making playoffs?', optionA: 'They find a way', optionB: 'Lottery bound', emoji: '🏀' },
+    { question: '3-point era ruining basketball?', optionA: 'It\'s boring now', optionB: 'Evolution', emoji: '🏀' },
+  ],
+  combat: [
+    { question: 'Jon Jones the MMA GOAT?', optionA: 'Undisputed', optionB: 'Overrated', emoji: '🥊' },
+    { question: 'Boxing or MMA: better sport?', optionA: 'Boxing', optionB: 'MMA', emoji: '🥊' },
+    { question: 'Islam Makhachev losing this year?', optionA: 'Someone beats him', optionB: 'Unbeatable', emoji: '🥊' },
+    { question: 'Best pound-for-pound fighter?', optionA: 'Islam Makhachev', optionB: 'Alex Pereira', emoji: '🏆' },
+  ],
+  f1: [
+    { question: 'Verstappen winning another title?', optionA: 'Unstoppable', optionB: 'Competition caught up', emoji: '🏎' },
+    { question: 'Hamilton regretting Ferrari?', optionA: 'Big mistake', optionB: 'Best move ever', emoji: '🏎' },
+    { question: 'Norris becoming world champion?', optionA: 'Next in line', optionB: 'Not in this era', emoji: '🏎' },
+  ],
+  nfl: [
+    { question: 'Mahomes the GOAT QB?', optionA: 'Already is', optionB: 'Needs more rings', emoji: '🏈' },
+    { question: 'Cowboys ever winning another Super Bowl?', optionA: 'Someday', optionB: 'Never again', emoji: '🏈' },
+  ],
+  hockey: [
+    { question: 'McDavid the best hockey player ever?', optionA: 'Generational', optionB: 'Gretzky untouchable', emoji: '🏒' },
+    { question: 'A Canadian team winning the Cup this year?', optionA: 'This is the year', optionB: 'Nope', emoji: '🏒' },
+  ],
+  rugby: [
+    { question: 'Best rugby nation?', optionA: 'New Zealand', optionB: 'South Africa', emoji: '🏉' },
+    { question: 'Rugby growing or dying?', optionA: 'Growing fast', optionB: 'Struggling', emoji: '🏉' },
+  ],
+  musique: [
+    { question: 'Drake or Kendrick: who wins?', optionA: 'Drake', optionB: 'Kendrick', emoji: '🎵' },
+    { question: 'Biggest artist in the world?', optionA: 'Taylor Swift', optionB: 'Bad Bunny', emoji: '🎵' },
+    { question: 'K-Pop taking over?', optionA: 'Already did', optionB: 'Overhyped', emoji: '🇰🇷' },
+    { question: 'Best rapper alive?', optionA: 'Kendrick', optionB: 'J. Cole', emoji: '🎤' },
+  ],
+  gaming: [
+    { question: 'GTA 6 living up to the hype?', optionA: 'Legendary', optionB: 'Overhyped', emoji: '🎮' },
+    { question: 'PC or Console?', optionA: 'PC master race', optionB: 'Console vibes', emoji: '🎮' },
+    { question: 'PS5 or Xbox?', optionA: 'PlayStation', optionB: 'Xbox', emoji: '🎮' },
+    { question: 'Nintendo Switch 2: day one buy?', optionA: 'Day one', optionB: 'Wait', emoji: '🎮' },
+  ],
+  cinema: [
+    { question: 'Marvel done or coming back?', optionA: 'Comeback arc', optionB: 'Fatigue is real', emoji: '🎬' },
+    { question: 'Netflix or Disney+?', optionA: 'Netflix', optionB: 'Disney+', emoji: '📺' },
+    { question: 'Anime mainstream now?', optionA: 'Fully mainstream', optionB: 'Still niche', emoji: '🎌' },
+  ],
+  drama: [
+    { question: 'Elon Musk: genius or villain?', optionA: 'Genius', optionB: 'Villain arc', emoji: '👀' },
+    { question: 'AI taking your job in 5 years?', optionA: 'Probably', optionB: 'Humans irreplaceable', emoji: '🤖' },
+    { question: 'TikTok: creative or brain rot?', optionA: 'Creative', optionB: 'Brain rot', emoji: '📱' },
+  ],
+  politics: [
+    { question: 'USA staying the superpower?', optionA: 'USA forever', optionB: 'China catching up', emoji: '🏛' },
+    { question: 'EU getting stronger or weaker?', optionA: 'Stronger', optionB: 'Falling apart', emoji: '🇪🇺' },
+  ],
+  world: [
+    { question: 'Climate change: still fixable?', optionA: 'If we act now', optionB: 'Too late', emoji: '🌍' },
+    { question: 'Global economy: growth or recession?', optionA: 'Growth', optionB: 'Recession', emoji: '📉' },
+  ],
+  science: [
+    { question: 'AI achieving AGI before 2030?', optionA: 'Definitely', optionB: 'Way further out', emoji: '🔬' },
+    { question: 'Humans on Mars before 2035?', optionA: 'SpaceX delivers', optionB: 'Too ambitious', emoji: '🚀' },
+  ],
+  health: [
+    { question: 'Ozempic: game changer or dangerous?', optionA: 'Game changer', optionB: 'Risky shortcut', emoji: '💪' },
+    { question: 'Sleep or exercise: more important?', optionA: 'Sleep', optionB: 'Exercise', emoji: '😴' },
+  ],
+  trending: [
+    { question: 'What breaks the internet this week?', optionA: 'Celebrity drama', optionB: 'Tech news', emoji: '🔥' },
+    { question: 'Internet culture: golden age or downfall?', optionA: 'Golden age', optionB: 'Getting worse', emoji: '🔥' },
+  ],
+  debate: [
+    { question: 'Morning person or night owl?', optionA: 'Early bird', optionB: 'Night owl', emoji: '🌅' },
+    { question: 'Cats or dogs?', optionA: 'Dogs forever', optionB: 'Cats superior', emoji: '🐾' },
+    { question: 'Android or iPhone?', optionA: 'Android', optionB: 'iPhone', emoji: '📱' },
+    { question: 'Pineapple on pizza?', optionA: 'Delicious', optionB: 'Crime', emoji: '🍕' },
+    { question: 'University worth it in 2026?', optionA: 'Still essential', optionB: 'Overpriced paper', emoji: '🎓' },
+    { question: '4-day work week: realistic?', optionA: 'The future', optionB: 'Dream on', emoji: '💼' },
+  ]
+};
+
+// ============================================
+// API-SPORTS GENERATORS
+// ============================================
+
+async function generateFootballLive() {
+  const predictions = [];
   try {
-    const url = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,dogecoin,ripple,cardano,avalanche-2,polkadot,chainlink,pepe&vs_currencies=usd&include_24hr_change=true';
+    if (!FOOTBALL_API_KEY) return predictions;
+
+    const today = new Date().toISOString().split('T')[0];
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+    const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
+
+    const res1 = await fetch(`https://v3.football.api-sports.io/fixtures?date=${today}&season=2025`, { headers });
+    const data1 = await res1.json();
+    let allMatches = [...(data1.response || [])];
+
+    // Only fetch tomorrow if today is thin
+    if (allMatches.length < 4) {
+      const res2 = await fetch(`https://v3.football.api-sports.io/fixtures?date=${tomorrow}&season=2025`, { headers });
+      const data2 = await res2.json();
+      allMatches.push(...(data2.response || []));
+    }
+
+    const topLeagues = [39, 140, 61, 135, 2, 78, 253, 262];
+    const topMatches = allMatches.filter(m => topLeagues.includes(m.league?.id));
+    const matches = topMatches.length > 0 ? topMatches : allMatches;
+
+    for (const match of matches.slice(0, 6)) {
+      const home = match.teams.home.name;
+      const away = match.teams.away.name;
+      const league = match.league.name;
+
+      const templates = [
+        { question: `${league}: ${home} vs ${away} — Who wins?`, optionA: home, optionB: away },
+        { question: `${home} vs ${away}: Over 2.5 goals?`, optionA: 'YES', optionB: 'NO' },
+        { question: `Clean sheet for ${home} against ${away}?`, optionA: 'YES', optionB: 'NO' },
+      ];
+
+      predictions.push({
+        ...templates[Math.floor(Math.random() * templates.length)],
+        category: 'football', emoji: '⚽',
+        expiresAt: expires(DURATION.SPORT_LIVE)
+      });
+    }
+  } catch (e) {
+    console.error('Football API error:', e.message);
+  }
+  return pickRandom(predictions, 4);
+}
+
+async function generateNBALive() {
+  const predictions = [];
+  try {
+    if (!FOOTBALL_API_KEY) return predictions;
+
+    const today = new Date().toISOString().split('T')[0];
+    const res = await fetch(`https://v1.basketball.api-sports.io/games?date=${today}`, {
+      headers: { 'x-apisports-key': FOOTBALL_API_KEY }
+    });
+    const data = await res.json();
+
+    if (data.response) {
+      const nbaGames = data.response.filter(g => g.league?.name?.includes('NBA'));
+      for (const game of nbaGames.slice(0, 4)) {
+        const home = game.teams.home.name;
+        const away = game.teams.away.name;
+        const templates = [
+          { question: `NBA: ${home} vs ${away} — Who wins?`, optionA: home, optionB: away },
+          { question: `${home} vs ${away}: Over 220 combined points?`, optionA: 'YES', optionB: 'NO' },
+        ];
+        predictions.push({
+          ...templates[Math.floor(Math.random() * templates.length)],
+          category: 'nba', emoji: '🏀',
+          expiresAt: expires(DURATION.SPORT_LIVE)
+        });
+      }
+    }
+  } catch (e) {
+    console.error('NBA API error:', e.message);
+  }
+  return predictions;
+}
+
+async function generateNFLLive() {
+  const predictions = [];
+  try {
+    if (!FOOTBALL_API_KEY) return predictions;
+
+    const today = new Date().toISOString().split('T')[0];
+    const res = await fetch(`https://v1.american-football.api-sports.io/games?date=${today}`, {
+      headers: { 'x-apisports-key': FOOTBALL_API_KEY }
+    });
+    const data = await res.json();
+
+    if (data.response) {
+      const nflGames = data.response.filter(g => g.league?.name?.includes('NFL'));
+      for (const game of nflGames.slice(0, 3)) {
+        const home = game.teams.home.name;
+        const away = game.teams.away.name;
+        predictions.push({
+          question: `NFL: ${home} vs ${away} — Who wins?`,
+          optionA: home, optionB: away,
+          category: 'nfl', emoji: '🏈',
+          expiresAt: expires(DURATION.SPORT_LIVE)
+        });
+      }
+    }
+  } catch (e) {
+    console.error('NFL API error:', e.message);
+  }
+  return predictions;
+}
+
+async function generateHockeyLive() {
+  const predictions = [];
+  try {
+    if (!FOOTBALL_API_KEY) return predictions;
+
+    const today = new Date().toISOString().split('T')[0];
+    const res = await fetch(`https://v1.hockey.api-sports.io/games?date=${today}`, {
+      headers: { 'x-apisports-key': FOOTBALL_API_KEY }
+    });
+    const data = await res.json();
+
+    if (data.response) {
+      const nhlGames = data.response.filter(g => g.league?.name?.includes('NHL'));
+      for (const game of nhlGames.slice(0, 3)) {
+        const home = game.teams.home.name;
+        const away = game.teams.away.name;
+        predictions.push({
+          question: `NHL: ${home} vs ${away} — Who wins?`,
+          optionA: home, optionB: away,
+          category: 'hockey', emoji: '🏒',
+          expiresAt: expires(DURATION.SPORT_LIVE)
+        });
+      }
+    }
+  } catch (e) {
+    console.error('Hockey API error:', e.message);
+  }
+  return predictions;
+}
+
+async function generateCombatLive() {
+  const predictions = [];
+  try {
+    if (!FOOTBALL_API_KEY) return predictions;
+
+    const res = await fetch('https://v1.mma.api-sports.io/fights?next=5', {
+      headers: { 'x-apisports-key': FOOTBALL_API_KEY }
+    });
+    const data = await res.json();
+
+    if (data.response) {
+      for (const fight of data.response.slice(0, 3)) {
+        if (fight.fighters?.first?.name && fight.fighters?.second?.name) {
+          const f1 = fight.fighters.first.name;
+          const f2 = fight.fighters.second.name;
+          const templates = [
+            { question: `${f1} vs ${f2} — Who wins?`, optionA: f1, optionB: f2 },
+            { question: `${f1} vs ${f2}: KO or Decision?`, optionA: 'KO/TKO', optionB: 'Decision' },
+          ];
+          predictions.push({
+            ...templates[Math.floor(Math.random() * templates.length)],
+            category: 'combat', emoji: '🥊',
+            expiresAt: expires(DURATION.EVENT)
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('MMA API error:', e.message);
+  }
+  return predictions;
+}
+
+async function generateF1Live() {
+  const predictions = [];
+  try {
+    if (!FOOTBALL_API_KEY) return predictions;
+
+    const res = await fetch('https://v1.formula-1.api-sports.io/races?next=3', {
+      headers: { 'x-apisports-key': FOOTBALL_API_KEY }
+    });
+    const data = await res.json();
+
+    if (data.response) {
+      for (const race of data.response.slice(0, 2)) {
+        const name = race.competition?.name || 'next race';
+        predictions.push({
+          question: `F1 ${name}: Who takes pole position?`,
+          optionA: 'Verstappen', optionB: 'Someone else',
+          category: 'f1', emoji: '🏎',
+          expiresAt: expires(DURATION.EVENT)
+        });
+        predictions.push({
+          question: `Safety Car at the ${name}?`,
+          optionA: 'YES', optionB: 'NO',
+          category: 'f1', emoji: '🏎',
+          expiresAt: expires(DURATION.EVENT)
+        });
+      }
+    }
+  } catch (e) {
+    console.error('F1 API error:', e.message);
+  }
+  return predictions;
+}
+
+async function generateRugbyLive() {
+  const predictions = [];
+  try {
+    if (!FOOTBALL_API_KEY) return predictions;
+
+    const today = new Date().toISOString().split('T')[0];
+    const res = await fetch(`https://v1.rugby.api-sports.io/games?date=${today}`, {
+      headers: { 'x-apisports-key': FOOTBALL_API_KEY }
+    });
+    const data = await res.json();
+
+    if (data.response) {
+      for (const game of data.response.slice(0, 3)) {
+        const home = game.teams.home.name;
+        const away = game.teams.away.name;
+        predictions.push({
+          question: `Rugby: ${home} vs ${away} — Who wins?`,
+          optionA: home, optionB: away,
+          category: 'rugby', emoji: '🏉',
+          expiresAt: expires(DURATION.SPORT_LIVE)
+        });
+      }
+    }
+  } catch (e) {
+    console.error('Rugby API error:', e.message);
+  }
+  return predictions;
+}
+
+// Map sport names to their generators
+const SPORT_GENERATORS = {
+  football: generateFootballLive,
+  nba: generateNBALive,
+  nfl: generateNFLLive,
+  hockey: generateHockeyLive,
+  combat: generateCombatLive,
+  f1: generateF1Live,
+  rugby: generateRugbyLive,
+};
+
+// ============================================
+// CRYPTO LIVE PRICE (CoinGecko - generous quota)
+// ============================================
+
+async function generateCryptoLive() {
+  const predictions = [];
+  try {
+    const url = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,dogecoin,ripple,cardano,avalanche-2,pepe&vs_currencies=usd&include_24hr_change=true';
     const headers = COINGECKO_API_KEY ? { 'x-cg-demo-api-key': COINGECKO_API_KEY } : {};
     const res = await fetch(url, { headers });
     const data = await res.json();
@@ -41,801 +528,204 @@ async function generateCryptoPredictions() {
       else if (price > 1) target = Math.round(price * 1.1);
       else target = (price * 1.15).toFixed(4);
 
-      const priceStr = price > 1 ? Math.round(price).toLocaleString() : price.toFixed(4);
       const targetStr = typeof target === 'number' && target > 1 ? target.toLocaleString() : target;
+      const priceStr = price > 1 ? Math.round(price).toLocaleString() : price.toFixed(4);
 
       const templates = [
-        { question: `${coin.name} above $${targetStr} this weekend?`, optionA: 'YES', optionB: 'NO' },
-        { question: `${coin.symbol} going up or down in the next 24h?`, optionA: '📈 Up', optionB: '📉 Down' },
-        { question: `${coin.name} will outperform ${coins[Math.floor(Math.random() * coins.length)].name} this week?`, optionA: 'YES', optionB: 'NO' },
-        { question: `${coin.symbol} hitting a new ATH this month?`, optionA: 'YES', optionB: 'NO' },
+        { question: `${coin.symbol} above $${targetStr} in the next 8h?`, optionA: 'YES', optionB: 'NO' },
+        { question: `${coin.symbol} going up or down in the next few hours?`, optionA: 'Up', optionB: 'Down' },
         { question: `Is $${priceStr} a good entry for ${coin.symbol}?`, optionA: 'Buy now', optionB: 'Wait' },
       ];
 
-      const tmpl = templates[Math.floor(Math.random() * templates.length)];
       predictions.push({
-        ...tmpl,
-        category: 'crypto',
-        emoji: coin.emoji,
-        expiresAt: expires(randomHours(24, 72))
+        ...templates[Math.floor(Math.random() * templates.length)],
+        category: 'crypto', emoji: coin.emoji,
+        expiresAt: expires(DURATION.CRYPTO_PRICE)
       });
     }
   } catch (e) {
     console.error('Crypto API error:', e.message);
-    predictions.push(...getCryptoFallbacks());
   }
-
-  return pickRandom(predictions, 5);
-}
-
-function getCryptoFallbacks() {
-  return [
-    { question: 'Bitcoin hitting $100K before summer?', optionA: 'YES', optionB: 'NO', category: 'crypto', emoji: '₿', expiresAt: expires(72) },
-    { question: 'Ethereum flipping Solana in volume this week?', optionA: 'ETH', optionB: 'SOL', category: 'crypto', emoji: '💎', expiresAt: expires(72) },
-    { question: 'A memecoin will 10x this week?', optionA: 'YES', optionB: 'NO', category: 'crypto', emoji: '🐸', expiresAt: expires(96) },
-    { question: 'Crypto market green or red tomorrow?', optionA: '🟢 Green', optionB: '🔴 Red', category: 'crypto', emoji: '📊', expiresAt: expires(24) },
-    { question: 'Best long-term hold right now?', optionA: 'Bitcoin', optionB: 'Ethereum', category: 'crypto', emoji: '💰', expiresAt: expires(96) },
-    { question: 'Next memecoin to explode?', optionA: 'DOGE', optionB: 'PEPE', category: 'crypto', emoji: '🚀', expiresAt: expires(72) },
-    { question: 'Will a new country adopt Bitcoin as legal tender this year?', optionA: 'YES', optionB: 'NO', category: 'crypto', emoji: '🌍', expiresAt: expires(168) },
-    { question: 'DeFi or CeFi winning in 2026?', optionA: 'DeFi', optionB: 'CeFi', category: 'crypto', emoji: '🏦', expiresAt: expires(168) },
-  ];
-}
-
-// --- CRYPTO NEWS PREDICTIONS ---
-async function generateCryptoNewsPredictions() {
-  const predictions = [];
-
-  try {
-    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
-
-    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=business&q=crypto%20OR%20bitcoin%20OR%20ethereum`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (data.results && data.results.length > 0) {
-      for (const article of data.results.slice(0, 3)) {
-        if (article.title && article.title.length > 15) {
-          const title = article.title.slice(0, 75);
-          predictions.push({
-            question: `"${title}" — Bullish or bearish for crypto?`,
-            optionA: '🟢 Bullish',
-            optionB: '🔴 Bearish',
-            category: 'crypto',
-            emoji: '📰',
-            expiresAt: expires(48)
-          });
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Crypto News API error:', e.message);
-  }
-
-  return pickRandom(predictions, 2);
-}
-
-// --- FOOTBALL PREDICTIONS ---
-async function generateFootballPredictions() {
-  const predictions = [];
-
-  try {
-    if (!FOOTBALL_API_KEY) throw new Error('No API key');
-
-    const today = new Date().toISOString().split('T')[0];
-    // Also check tomorrow for upcoming matches
-    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
-
-    // Fetch today's matches across all leagues
-    const url = `https://v3.football.api-sports.io/fixtures?date=${today}&season=2025`;
-    const url2 = `https://v3.football.api-sports.io/fixtures?date=${tomorrow}&season=2025`;
-    const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
-
-    const [res1, res2] = await Promise.all([
-      fetch(url, { headers }),
-      fetch(url2, { headers })
-    ]);
-    const [data1, data2] = await Promise.all([res1.json(), res2.json()]);
-
-    const allMatches = [...(data1.response || []), ...(data2.response || [])];
-    // Filter for top leagues: PL, La Liga, Ligue 1, Serie A, UCL, Bundesliga, MLS, Liga MX
-    const topLeagues = [39, 140, 61, 135, 2, 78, 253, 262];
-    const topMatches = allMatches.filter(m => topLeagues.includes(m.league?.id));
-    const matches = topMatches.length > 0 ? topMatches : allMatches;
-
-    if (matches.length > 0) {
-      for (const match of matches.slice(0, 6)) {
-        const home = match.teams.home.name;
-        const away = match.teams.away.name;
-        const league = match.league.name;
-
-        const templates = [
-          { question: `${league}: ${home} vs ${away} — Who wins?`, optionA: home, optionB: away },
-          { question: `${home} vs ${away}: Over 2.5 goals?`, optionA: 'YES', optionB: 'NO' },
-          { question: `Clean sheet for ${home} against ${away}?`, optionA: 'YES', optionB: 'NO' },
-        ];
-
-        predictions.push({
-          ...templates[Math.floor(Math.random() * templates.length)],
-          category: 'football',
-          emoji: '⚽',
-          expiresAt: expires(24)
-        });
-      }
-    }
-  } catch (e) {
-    console.error('Football API error:', e.message);
-  }
-
-  if (predictions.length === 0) predictions.push(...getFootballFallbacks());
-  return pickRandom(predictions, 5);
-}
-
-function getFootballFallbacks() {
-  const pools = [
-    { question: 'Real Madrid winning the Champions League this season?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Mbappe scoring this weekend?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Who goes further in the UCL?', optionA: 'Real Madrid', optionB: 'Man City' },
-    { question: 'Premier League: Arsenal finally winning the title?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Transfer over $150M happening this summer?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Vinicius Jr winning the Ballon d\'Or 2026?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Best league in the world?', optionA: 'Premier League', optionB: 'La Liga' },
-    { question: 'Haaland hitting 40+ goals this season?', optionA: 'YES', optionB: 'NO' },
-    { question: 'A relegation team beating a top 4 team this weekend?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Liverpool winning a trophy this season?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Next El Clasico: More than 4 goals?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Bayern Munich bouncing back to dominate Bundesliga?', optionA: 'YES', optionB: 'NO' },
-  ];
-  return pools.map(p => ({ ...p, category: 'football', emoji: '⚽', expiresAt: expires(48) }));
-}
-
-// --- NBA PREDICTIONS (LIVE API) ---
-async function generateNBAPredictions() {
-  const predictions = [];
-
-  try {
-    if (!FOOTBALL_API_KEY) throw new Error('No API key');
-
-    const today = new Date().toISOString().split('T')[0];
-    const url = `https://v1.basketball.api-sports.io/games?date=${today}`;
-    const res = await fetch(url, { headers: { 'x-apisports-key': FOOTBALL_API_KEY } });
-    const data = await res.json();
-
-    if (data.response && data.response.length > 0) {
-      const nbaGames = data.response.filter(g => g.league?.name?.includes('NBA'));
-      for (const game of nbaGames.slice(0, 4)) {
-        const home = game.teams.home.name;
-        const away = game.teams.away.name;
-        const templates = [
-          { question: `NBA: ${home} vs ${away} — Who wins?`, optionA: home, optionB: away },
-          { question: `${home} vs ${away}: Over 220 combined points?`, optionA: 'YES', optionB: 'NO' },
-        ];
-        predictions.push({
-          ...templates[Math.floor(Math.random() * templates.length)],
-          category: 'nba', emoji: '🏀', expiresAt: expires(24)
-        });
-      }
-    }
-  } catch (e) {
-    console.error('NBA API error:', e.message);
-  }
-
-  if (predictions.length === 0) {
-    const pools = [
-      { question: 'Wembanyama winning MVP this season?', optionA: 'YES', optionB: 'NO' },
-      { question: 'LeBron James retiring in 2026?', optionA: 'YES', optionB: 'NO' },
-      { question: 'Who wins the NBA Championship?', optionA: 'Celtics', optionB: 'Nuggets' },
-      { question: 'Steph Curry breaking his own 3-point record?', optionA: 'YES', optionB: 'NO' },
-      { question: 'Better stats this month: Wemby or Luka?', optionA: 'Wemby', optionB: 'Luka' },
-      { question: 'A player dropping 60+ points this week?', optionA: 'YES', optionB: 'NO' },
-      { question: 'Lakers making the playoffs?', optionA: 'YES', optionB: 'NO' },
-      { question: 'Most exciting young star in the NBA?', optionA: 'Wembanyama', optionB: 'Ant Edwards' },
-    ];
-    predictions.push(...pools.map(p => ({ ...p, category: 'nba', emoji: '🏀', expiresAt: expires(48) })));
-  }
-
-  return pickRandom(predictions, 3);
-}
-
-// --- UFC / COMBAT (LIVE API) ---
-async function generateCombatPredictions() {
-  const predictions = [];
-
-  try {
-    if (!FOOTBALL_API_KEY) throw new Error('No API key');
-
-    // Get upcoming MMA events
-    const url = `https://v1.mma.api-sports.io/fights?next=5`;
-    const res = await fetch(url, { headers: { 'x-apisports-key': FOOTBALL_API_KEY } });
-    const data = await res.json();
-
-    if (data.response && data.response.length > 0) {
-      for (const fight of data.response.slice(0, 3)) {
-        if (fight.fighters?.first?.name && fight.fighters?.second?.name) {
-          const f1 = fight.fighters.first.name;
-          const f2 = fight.fighters.second.name;
-          const templates = [
-            { question: `${f1} vs ${f2} — Who wins?`, optionA: f1, optionB: f2 },
-            { question: `${f1} vs ${f2}: KO or Decision?`, optionA: 'KO/TKO', optionB: 'Decision' },
-          ];
-          predictions.push({
-            ...templates[Math.floor(Math.random() * templates.length)],
-            category: 'combat', emoji: '🥊', expiresAt: expires(72)
-          });
-        }
-      }
-    }
-  } catch (e) {
-    console.error('MMA API error:', e.message);
-  }
-
-  if (predictions.length === 0) {
-    const pools = [
-      { question: 'UFC main event this weekend ending by KO?', optionA: 'KO/TKO', optionB: 'Decision' },
-      { question: 'Conor McGregor actually coming back to fight?', optionA: 'YES', optionB: 'NO' },
-      { question: 'Jake Paul losing his next fight?', optionA: 'He loses', optionB: 'He wins' },
-      { question: 'Jon Jones the GOAT of MMA?', optionA: 'GOAT', optionB: 'Overrated' },
-      { question: 'Islam Makhachev staying unbeaten this year?', optionA: 'YES', optionB: 'NO' },
-    ];
-    predictions.push(...pools.map(p => ({ ...p, category: 'combat', emoji: '🥊', expiresAt: expires(72) })));
-  }
-
-  return pickRandom(predictions, 2);
-}
-
-// --- F1 (LIVE API) ---
-async function generateF1Predictions() {
-  const predictions = [];
-
-  try {
-    if (!FOOTBALL_API_KEY) throw new Error('No API key');
-
-    const url = `https://v1.formula-1.api-sports.io/races?next=3`;
-    const res = await fetch(url, { headers: { 'x-apisports-key': FOOTBALL_API_KEY } });
-    const data = await res.json();
-
-    if (data.response && data.response.length > 0) {
-      for (const race of data.response.slice(0, 2)) {
-        const name = race.competition?.name || 'next race';
-        predictions.push({
-          question: `F1 ${name}: Who takes pole position?`,
-          optionA: 'Verstappen', optionB: 'Someone else',
-          category: 'f1', emoji: '🏎️', expiresAt: expires(72)
-        });
-        predictions.push({
-          question: `Safety Car at the ${name}?`,
-          optionA: 'YES', optionB: 'NO',
-          category: 'f1', emoji: '🏎️', expiresAt: expires(72)
-        });
-      }
-    }
-  } catch (e) {
-    console.error('F1 API error:', e.message);
-  }
-
-  if (predictions.length === 0) {
-    const pools = [
-      { question: 'Verstappen winning the next Grand Prix?', optionA: 'YES', optionB: 'NO' },
-      { question: 'Hamilton regretting Ferrari before end of season?', optionA: 'YES', optionB: 'NO' },
-      { question: 'Leclerc winning at Monaco?', optionA: 'YES', optionB: 'NO' },
-      { question: 'Who finishes higher in the championship?', optionA: 'Red Bull', optionB: 'Ferrari' },
-      { question: 'McLaren becoming a serious title contender?', optionA: 'YES', optionB: 'NO' },
-    ];
-    predictions.push(...pools.map(p => ({ ...p, category: 'f1', emoji: '🏎️', expiresAt: expires(72) })));
-  }
-  return pickRandom(predictions, 2);
-}
-
-// --- NFL PREDICTIONS (LIVE API) ---
-async function generateNFLPredictions() {
-  const predictions = [];
-
-  try {
-    if (!FOOTBALL_API_KEY) throw new Error('No API key');
-
-    const today = new Date().toISOString().split('T')[0];
-    const url = `https://v1.american-football.api-sports.io/games?date=${today}`;
-    const res = await fetch(url, { headers: { 'x-apisports-key': FOOTBALL_API_KEY } });
-    const data = await res.json();
-
-    if (data.response && data.response.length > 0) {
-      const nflGames = data.response.filter(g => g.league?.name?.includes('NFL'));
-      for (const game of nflGames.slice(0, 3)) {
-        const home = game.teams.home.name;
-        const away = game.teams.away.name;
-        predictions.push({
-          question: `NFL: ${home} vs ${away} — Who wins?`,
-          optionA: home, optionB: away,
-          category: 'nfl', emoji: '🏈', expiresAt: expires(24)
-        });
-      }
-    }
-  } catch (e) {
-    console.error('NFL API error:', e.message);
-  }
-
-  if (predictions.length === 0) {
-    const pools = [
-      { question: 'Patrick Mahomes winning another Super Bowl?', optionA: 'YES', optionB: 'NO' },
-      { question: 'Best QB in the NFL right now?', optionA: 'Mahomes', optionB: 'Josh Allen' },
-      { question: 'A rookie QB leading his team to playoffs?', optionA: 'YES', optionB: 'NO' },
-      { question: 'Cowboys making a deep playoff run this year?', optionA: 'YES', optionB: 'NO' },
-      { question: 'NFL or NBA: bigger global audience by 2027?', optionA: 'NFL', optionB: 'NBA' },
-    ];
-    predictions.push(...pools.map(p => ({ ...p, category: 'nfl', emoji: '🏈', expiresAt: expires(72) })));
-  }
-
-  return pickRandom(predictions, 2);
-}
-
-// --- HOCKEY / NHL PREDICTIONS (LIVE API) ---
-async function generateHockeyPredictions() {
-  const predictions = [];
-
-  try {
-    if (!FOOTBALL_API_KEY) throw new Error('No API key');
-
-    const today = new Date().toISOString().split('T')[0];
-    const url = `https://v1.hockey.api-sports.io/games?date=${today}`;
-    const res = await fetch(url, { headers: { 'x-apisports-key': FOOTBALL_API_KEY } });
-    const data = await res.json();
-
-    if (data.response && data.response.length > 0) {
-      const nhlGames = data.response.filter(g => g.league?.name?.includes('NHL'));
-      for (const game of nhlGames.slice(0, 3)) {
-        const home = game.teams.home.name;
-        const away = game.teams.away.name;
-        predictions.push({
-          question: `NHL: ${home} vs ${away} — Who wins?`,
-          optionA: home, optionB: away,
-          category: 'hockey', emoji: '🏒', expiresAt: expires(24)
-        });
-      }
-    }
-  } catch (e) {
-    console.error('Hockey API error:', e.message);
-  }
-
-  if (predictions.length === 0) {
-    const pools = [
-      { question: 'Connor McDavid winning the Hart Trophy again?', optionA: 'YES', optionB: 'NO' },
-      { question: 'A Canadian team winning the Stanley Cup?', optionA: 'YES', optionB: 'NO' },
-      { question: 'Over 7 goals in tonight\'s biggest NHL game?', optionA: 'YES', optionB: 'NO' },
-    ];
-    predictions.push(...pools.map(p => ({ ...p, category: 'hockey', emoji: '🏒', expiresAt: expires(72) })));
-  }
-
-  return pickRandom(predictions, 2);
-}
-
-// --- RUGBY PREDICTIONS (LIVE API) ---
-async function generateRugbyPredictions() {
-  const predictions = [];
-
-  try {
-    if (!FOOTBALL_API_KEY) throw new Error('No API key');
-
-    const today = new Date().toISOString().split('T')[0];
-    const url = `https://v1.rugby.api-sports.io/games?date=${today}`;
-    const res = await fetch(url, { headers: { 'x-apisports-key': FOOTBALL_API_KEY } });
-    const data = await res.json();
-
-    if (data.response && data.response.length > 0) {
-      for (const game of data.response.slice(0, 3)) {
-        const home = game.teams.home.name;
-        const away = game.teams.away.name;
-        predictions.push({
-          question: `Rugby: ${home} vs ${away} — Who wins?`,
-          optionA: home, optionB: away,
-          category: 'rugby', emoji: '🏉', expiresAt: expires(24)
-        });
-      }
-    }
-  } catch (e) {
-    console.error('Rugby API error:', e.message);
-  }
-
-  if (predictions.length === 0) {
-    const pools = [
-      { question: 'New Zealand winning the next Rugby World Cup?', optionA: 'YES', optionB: 'NO' },
-      { question: 'Best rugby nation in the world?', optionA: 'New Zealand', optionB: 'South Africa' },
-      { question: 'A record score in the Six Nations this year?', optionA: 'YES', optionB: 'NO' },
-    ];
-    predictions.push(...pools.map(p => ({ ...p, category: 'rugby', emoji: '🏉', expiresAt: expires(72) })));
-  }
-
-  return pickRandom(predictions, 1);
-}
-
-// --- MUSIC (LIVE NEWS + FALLBACK) ---
-async function generateMusiquePredictions() {
-  const predictions = [];
-
-  try {
-    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
-    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=entertainment&q=music%20OR%20album%20OR%20rapper%20OR%20singer%20OR%20concert%20OR%20spotify%20OR%20Grammy`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (data.results && data.results.length > 0) {
-      for (const article of data.results.slice(0, 4)) {
-        if (article.title && article.title.length > 15) {
-          predictions.push({
-            question: `${article.title.slice(0, 80)} — Big deal or nah?`,
-            optionA: 'Huge', optionB: 'Overhyped',
-            category: 'musique', emoji: '🎵', expiresAt: expires(72)
-          });
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Music News error:', e.message);
-  }
-
-  // Always add some curated templates too
-  const fallbacks = [
-    { question: 'Who gets more streams this week?', optionA: 'Drake', optionB: 'Kendrick Lamar' },
-    { question: 'Biggest artist in the world right now?', optionA: 'Taylor Swift', optionB: 'The Weeknd' },
-    { question: 'Best rapper alive?', optionA: 'Kendrick', optionB: 'J. Cole' },
-    { question: 'Next #1 on Billboard: rap or pop?', optionA: 'Rap', optionB: 'Pop' },
-    { question: 'Bad Bunny or Drake: more monthly listeners?', optionA: 'Bad Bunny', optionB: 'Drake' },
-    { question: 'SZA or Doja Cat: who runs R&B?', optionA: 'SZA', optionB: 'Doja Cat' },
-    { question: 'Will AI-generated music hit #1 on charts in 2026?', optionA: 'YES', optionB: 'NO' },
-    { question: 'A K-pop group outselling every Western artist this year?', optionA: 'YES', optionB: 'NO' },
-  ];
-  predictions.push(...fallbacks.map(p => ({ ...p, category: 'musique', emoji: '🎵', expiresAt: expires(96) })));
-
-  return pickRandom(predictions, 3);
-}
-
-// --- GAMING (LIVE NEWS + FALLBACK) ---
-async function generateGamingPredictions() {
-  const predictions = [];
-
-  try {
-    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
-    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=technology&q=gaming%20OR%20playstation%20OR%20xbox%20OR%20nintendo%20OR%20esports%20OR%20GTA%20OR%20fortnite`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (data.results && data.results.length > 0) {
-      for (const article of data.results.slice(0, 3)) {
-        if (article.title && article.title.length > 15) {
-          predictions.push({
-            question: `${article.title.slice(0, 80)} — W or L for gamers?`,
-            optionA: 'W', optionB: 'L',
-            category: 'gaming', emoji: '🎮', expiresAt: expires(72)
-          });
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Gaming News error:', e.message);
-  }
-
-  const fallbacks = [
-    { question: 'GTA 6 releasing on time?', optionA: 'On time', optionB: 'Delayed' },
-    { question: 'Best-selling game of 2026?', optionA: 'GTA 6', optionB: 'Something else' },
-    { question: 'PS5 Pro outselling Xbox?', optionA: 'PS5 Pro', optionB: 'Xbox' },
-    { question: 'EA FC 26 better than 25?', optionA: 'Better', optionB: 'Worse' },
-    { question: 'PC or Console: better for gaming in 2026?', optionA: 'PC', optionB: 'Console' },
-    { question: 'VR gaming going mainstream this year?', optionA: 'YES', optionB: 'NO' },
-  ];
-  predictions.push(...fallbacks.map(p => ({ ...p, category: 'gaming', emoji: '🎮', expiresAt: expires(96) })));
-
-  return pickRandom(predictions, 2);
-}
-
-// --- CINEMA & SERIES (LIVE NEWS + FALLBACK) ---
-async function generateCinemaPredictions() {
-  const predictions = [];
-
-  try {
-    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
-    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=entertainment&q=movie%20OR%20Netflix%20OR%20Disney%20OR%20Marvel%20OR%20series%20OR%20box%20office%20OR%20streaming`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (data.results && data.results.length > 0) {
-      for (const article of data.results.slice(0, 3)) {
-        if (article.title && article.title.length > 15) {
-          predictions.push({
-            question: `${article.title.slice(0, 80)} — Hit or flop?`,
-            optionA: 'Hit', optionB: 'Flop',
-            category: 'cinema', emoji: '🎬', expiresAt: expires(72)
-          });
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Cinema News error:', e.message);
-  }
-
-  const fallbacks = [
-    { question: 'Next Marvel movie crossing $1 billion box office?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Netflix or Disney+: more hits this year?', optionA: 'Netflix', optionB: 'Disney+' },
-    { question: 'An anime becoming the #1 movie worldwide this month?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Best streaming platform in 2026?', optionA: 'Netflix', optionB: 'YouTube' },
-    { question: 'Squid Game S3 beating S1 viewership records?', optionA: 'YES', optionB: 'NO' },
-  ];
-  predictions.push(...fallbacks.map(p => ({ ...p, category: 'cinema', emoji: '🎬', expiresAt: expires(96) })));
-
-  return pickRandom(predictions, 2);
-}
-
-// --- DRAMA & BUZZ (LIVE NEWS + FALLBACK) ---
-async function generateDramaPredictions() {
-  const predictions = [];
-
-  try {
-    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
-    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=technology&q=AI%20OR%20Elon%20Musk%20OR%20Apple%20OR%20TikTok%20OR%20YouTube%20OR%20viral%20OR%20influencer`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (data.results && data.results.length > 0) {
-      for (const article of data.results.slice(0, 3)) {
-        if (article.title && article.title.length > 15) {
-          predictions.push({
-            question: `${article.title.slice(0, 80)} — Will people care in a week?`,
-            optionA: 'YES', optionB: 'Already forgot',
-            category: 'drama', emoji: '👀', expiresAt: expires(48)
-          });
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Drama News error:', e.message);
-  }
-
-  const fallbacks = [
-    { question: 'Elon Musk causing another controversy this week?', optionA: 'YES (obviously)', optionB: 'NO (miracle)' },
-    { question: 'MrBeast dropping a 200M+ views video this month?', optionA: 'YES', optionB: 'NO' },
-    { question: 'AI replacing a major job category by end of 2026?', optionA: 'YES', optionB: 'NO' },
-    { question: 'TikTok getting banned in another country?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Twitter/X still relevant in 2026?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Sam Altman making a shocking announcement this month?', optionA: 'YES', optionB: 'NO' },
-  ];
-  predictions.push(...fallbacks.map(p => ({ ...p, category: 'drama', emoji: '👀', expiresAt: expires(72) })));
-
-  return pickRandom(predictions, 2);
-}
-
-// --- POLITICS (LIVE NEWS) ---
-async function generatePoliticsPredictions() {
-  const predictions = [];
-
-  try {
-    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
-    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=politics`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (data.results && data.results.length > 0) {
-      for (const article of data.results.slice(0, 4)) {
-        if (article.title && article.title.length > 15) {
-          predictions.push({
-            question: `${article.title.slice(0, 80)} — Good or bad for the world?`,
-            optionA: 'Good move', optionB: 'Bad move',
-            category: 'politics', emoji: '🏛️', expiresAt: expires(48)
-          });
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Politics News error:', e.message);
-  }
-
-  const fallbacks = [
-    { question: 'Will a major world leader resign or be removed this year?', optionA: 'YES', optionB: 'NO' },
-    { question: 'US-China relations improving or worsening in 2026?', optionA: 'Improving', optionB: 'Worsening' },
-    { question: 'A new country joining NATO or BRICS this year?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Next US election: Democrats or Republicans winning?', optionA: 'Democrats', optionB: 'Republicans' },
-  ];
-  predictions.push(...fallbacks.map(p => ({ ...p, category: 'politics', emoji: '🏛️', expiresAt: expires(96) })));
-
-  return pickRandom(predictions, 2);
-}
-
-// --- WORLD / GEOPOLITICS (LIVE NEWS) ---
-async function generateWorldPredictions() {
-  const predictions = [];
-
-  try {
-    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
-    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=world`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (data.results && data.results.length > 0) {
-      for (const article of data.results.slice(0, 4)) {
-        if (article.title && article.title.length > 15) {
-          predictions.push({
-            question: `${article.title.slice(0, 80)} — Will this escalate?`,
-            optionA: 'YES', optionB: 'NO',
-            category: 'world', emoji: '🌍', expiresAt: expires(48)
-          });
-        }
-      }
-    }
-  } catch (e) {
-    console.error('World News error:', e.message);
-  }
-
-  const fallbacks = [
-    { question: 'A major peace deal happening in 2026?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Global economy: recession or growth in 2026?', optionA: 'Growth', optionB: 'Recession' },
-    { question: 'The next big global crisis will be about?', optionA: 'Economy', optionB: 'Climate' },
-  ];
-  predictions.push(...fallbacks.map(p => ({ ...p, category: 'world', emoji: '🌍', expiresAt: expires(96) })));
-
-  return pickRandom(predictions, 2);
-}
-
-// --- SCIENCE & SPACE (LIVE NEWS) ---
-async function generateSciencePredictions() {
-  const predictions = [];
-
-  try {
-    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
-    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=science`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (data.results && data.results.length > 0) {
-      for (const article of data.results.slice(0, 3)) {
-        if (article.title && article.title.length > 15) {
-          predictions.push({
-            question: `${article.title.slice(0, 80)} — Breakthrough or hype?`,
-            optionA: 'Breakthrough', optionB: 'Overhyped',
-            category: 'science', emoji: '🔬', expiresAt: expires(72)
-          });
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Science News error:', e.message);
-  }
-
-  const fallbacks = [
-    { question: 'Humans on Mars before 2030?', optionA: 'YES', optionB: 'NO' },
-    { question: 'AI achieving AGI before 2028?', optionA: 'YES', optionB: 'NO' },
-    { question: 'A major space discovery this year?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Nuclear fusion becoming viable for energy this decade?', optionA: 'YES', optionB: 'NO' },
-  ];
-  predictions.push(...fallbacks.map(p => ({ ...p, category: 'science', emoji: '🔬', expiresAt: expires(96) })));
-
-  return pickRandom(predictions, 2);
-}
-
-// --- HEALTH & FITNESS (LIVE NEWS) ---
-async function generateHealthPredictions() {
-  const predictions = [];
-
-  try {
-    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
-    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=health`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (data.results && data.results.length > 0) {
-      for (const article of data.results.slice(0, 3)) {
-        if (article.title && article.title.length > 15) {
-          predictions.push({
-            question: `${article.title.slice(0, 80)} — Game changer or overblown?`,
-            optionA: 'Game changer', optionB: 'Overblown',
-            category: 'health', emoji: '💪', expiresAt: expires(72)
-          });
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Health News error:', e.message);
-  }
-
-  const fallbacks = [
-    { question: 'Ozempic still the biggest health trend in 2026?', optionA: 'YES', optionB: 'Something new' },
-    { question: 'A cure for a major disease announced this year?', optionA: 'YES', optionB: 'NO' },
-    { question: 'Cold plunge or sauna: better for health?', optionA: 'Cold plunge', optionB: 'Sauna' },
-    { question: 'Mental health apps actually helping people?', optionA: 'YES', optionB: 'Placebo' },
-  ];
-  predictions.push(...fallbacks.map(p => ({ ...p, category: 'health', emoji: '💪', expiresAt: expires(96) })));
-
-  return pickRandom(predictions, 2);
-}
-
-// --- NEWS-BASED PREDICTIONS ---
-async function generateNewsPredictions() {
-  const predictions = [];
-
-  try {
-    if (!NEWS_API_KEY) throw new Error('No NEWS API key');
-
-    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=top`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (data.results && data.results.length > 0) {
-      for (const article of data.results.slice(0, 3)) {
-        if (article.title && article.title.length > 10) {
-          predictions.push({
-            question: `"${article.title.slice(0, 80)}..." — Will this change anything?`,
-            optionA: 'Big impact',
-            optionB: 'Forgotten tomorrow',
-            category: 'trending',
-            emoji: '🔥',
-            expiresAt: expires(48)
-          });
-        }
-      }
-    }
-  } catch (e) {
-    console.error('News API error:', e.message);
-  }
-
-  if (predictions.length === 0) predictions.push(...getTrendingFallbacks());
-  return pickRandom(predictions, 1);
-}
-
-function getTrendingFallbacks() {
-  return [
-    { question: 'Hottest topic this week: politics or entertainment?', optionA: 'Politics', optionB: 'Entertainment', category: 'trending', emoji: '🔥', expiresAt: expires(48) },
-    { question: 'A news story breaking the internet this week?', optionA: 'YES', optionB: 'NO', category: 'trending', emoji: '🔥', expiresAt: expires(72) },
-    { question: 'Most talked about person this week?', optionA: 'Elon Musk', optionB: 'Someone else', category: 'trending', emoji: '🔥', expiresAt: expires(72) },
-  ];
+  return pickRandom(predictions, 4);
 }
 
 // ============================================
-// MAIN GENERATOR
+// NEWS-BASED GENERATOR (NewsData.io)
 // ============================================
-async function generateDailyPredictions() {
-  console.log('\n🔮 Generating daily predictions...');
 
-  const results = await Promise.allSettled([
-    generateCryptoPredictions(),
-    generateCryptoNewsPredictions(),
-    generateFootballPredictions(),
-    generateNBAPredictions(),
-    generateCombatPredictions(),
-    generateF1Predictions(),
-    generateNFLPredictions(),
-    generateHockeyPredictions(),
-    generateRugbyPredictions(),
-    generateMusiquePredictions(),
-    generateGamingPredictions(),
-    generateCinemaPredictions(),
-    generateDramaPredictions(),
-    generatePoliticsPredictions(),
-    generateWorldPredictions(),
-    generateSciencePredictions(),
-    generateHealthPredictions(),
-    generateNewsPredictions()
-  ]);
+async function generateFromNews(newsConfig) {
+  const predictions = [];
+  if (!NEWS_API_KEY) return predictions;
 
-  let total = 0;
-  for (const result of results) {
-    if (result.status === 'fulfilled') {
-      for (const pred of result.value) {
-        const existing = await db.getActivePredictions();
-        const isDupe = existing.some(e =>
-          e.question.toLowerCase().includes(pred.question.toLowerCase().slice(0, 30))
-        );
-        if (!isDupe) {
-          await db.addPrediction(pred);
-          total++;
+  try {
+    let url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=${newsConfig.category}`;
+    if (newsConfig.q) url += `&q=${newsConfig.q}`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.results) {
+      for (const article of data.results.slice(0, 4)) {
+        if (!article.title || article.title.length < 15) continue;
+        const title = article.title.slice(0, 75);
+
+        // Pick a random format
+        const fmt = NEWS_FORMATS[Math.floor(Math.random() * NEWS_FORMATS.length)];
+
+        // Use bullish/bearish specifically for crypto
+        const finalFmt = newsConfig.predCat === 'crypto'
+          ? { suffix: ' — Bullish or bearish?', a: 'Bullish', b: 'Bearish' }
+          : fmt;
+
+        predictions.push({
+          question: `"${title}"${finalFmt.suffix}`,
+          optionA: finalFmt.a, optionB: finalFmt.b,
+          category: newsConfig.predCat, emoji: newsConfig.emoji,
+          expiresAt: expires(DURATION.NEWS)
+        });
+      }
+    }
+  } catch (e) {
+    console.error(`News API error (${newsConfig.category}):`, e.message);
+  }
+  return pickRandom(predictions, 2);
+}
+
+// ============================================
+// OPINION BACKUP (free, no API)
+// ============================================
+
+function generateOpinionPredictions(category, count) {
+  const pool = OPINION_POOLS[category];
+  if (!pool || pool.length === 0) return [];
+
+  const durations = [DURATION.FLASH, DURATION.SHORT, DURATION.MEDIUM];
+  return pickRandom(pool, count).map(p => ({
+    ...p,
+    category,
+    expiresAt: expires(durations[Math.floor(Math.random() * durations.length)])
+  }));
+}
+
+// ============================================
+// SMART GENERATOR - Main engine
+// ============================================
+
+async function addIfNotDupe(pred, activeList) {
+  const isDupe = activeList.some(e =>
+    e.question.toLowerCase().includes(pred.question.toLowerCase().slice(0, 30))
+  );
+  if (!isDupe) {
+    await db.addPrediction(pred);
+    return true;
+  }
+  return false;
+}
+
+async function smartGenerate() {
+  console.log('\n=== Smart generation cycle ===');
+
+  const active = await db.getActivePredictions();
+  let totalGenerated = 0;
+
+  // Count per category
+  const counts = {};
+  for (const cat of Object.keys(MIN_SLOTS)) {
+    counts[cat] = active.filter(p => p.category === cat).length;
+  }
+  console.log('Active counts:', JSON.stringify(counts));
+  console.log(`Total active: ${active.length}`);
+
+  // === STEP 1: API-Sports rotation ===
+  const sportsToFetch = API_SPORTS_ROTATION[apiSportsCycleIndex % API_SPORTS_ROTATION.length];
+  apiSportsCycleIndex++;
+  console.log(`Sports rotation: [${sportsToFetch.join(', ')}]`);
+
+  for (const sport of sportsToFetch) {
+    const generator = SPORT_GENERATORS[sport];
+    if (!generator) continue;
+    try {
+      const preds = await generator();
+      for (const pred of preds) {
+        if (await addIfNotDupe(pred, active)) {
+          totalGenerated++;
+          active.push(pred); // Track to avoid self-dupes
         }
       }
-    } else {
-      console.error('Generator failed:', result.reason);
+      if (preds.length > 0) {
+        console.log(`  ${sport}: +${preds.length} live`);
+      }
+    } catch (e) {
+      console.error(`  ${sport} error:`, e.message);
     }
   }
 
-  console.log(`✅ Generated ${total} new predictions\n`);
-  return total;
+  // === STEP 2: Crypto live price (CoinGecko - always, cheap quota) ===
+  if ((counts.crypto || 0) < 5) {
+    try {
+      const cryptoLive = await generateCryptoLive();
+      for (const pred of cryptoLive) {
+        if (await addIfNotDupe(pred, active)) {
+          totalGenerated++;
+          active.push(pred);
+        }
+      }
+      if (cryptoLive.length > 0) console.log(`  crypto price: +${cryptoLive.length} live`);
+    } catch (e) {
+      console.error('  Crypto live error:', e.message);
+    }
+  }
+
+  // === STEP 3: News rotation ===
+  const newsToFetch = NEWS_ROTATION[newsCycleIndex % NEWS_ROTATION.length];
+  newsCycleIndex++;
+  console.log(`News rotation: [${newsToFetch.map(n => n.predCat).join(', ')}]`);
+
+  for (const newsConfig of newsToFetch) {
+    try {
+      const preds = await generateFromNews(newsConfig);
+      for (const pred of preds) {
+        if (await addIfNotDupe(pred, active)) {
+          totalGenerated++;
+          active.push(pred);
+        }
+      }
+      if (preds.length > 0) console.log(`  ${newsConfig.predCat} news: +${preds.length}`);
+    } catch (e) {
+      console.error(`  ${newsConfig.predCat} news error:`, e.message);
+    }
+  }
+
+  // === STEP 4: Fill remaining gaps with opinion backup ===
+  // Recount after API additions
+  const updatedCounts = {};
+  for (const cat of Object.keys(MIN_SLOTS)) {
+    updatedCounts[cat] = active.filter(p => p.category === cat).length;
+  }
+
+  for (const [cat, minRequired] of Object.entries(MIN_SLOTS)) {
+    const deficit = minRequired - (updatedCounts[cat] || 0);
+    if (deficit <= 0) continue;
+
+    const opinions = generateOpinionPredictions(cat, deficit);
+    for (const pred of opinions) {
+      if (await addIfNotDupe(pred, active)) {
+        totalGenerated++;
+        active.push(pred);
+      }
+    }
+    if (opinions.length > 0) console.log(`  ${cat} opinion backup: +${opinions.length}`);
+  }
+
+  console.log(`=== Generated ${totalGenerated} total ===\n`);
+  return totalGenerated;
 }
+
+// ============================================
+// SCHEDULER
+// ============================================
 
 async function cleanupExpired() {
-  // With PostgreSQL, expired predictions stay in DB but are filtered by queries
-  // No manual cleanup needed - getActivePredictions() already filters them
   const preds = await db.getPredictions();
   const now = new Date();
   const expired = preds.filter(p => !p.resolved && new Date(p.expiresAt) < now);
@@ -845,33 +735,43 @@ async function cleanupExpired() {
 }
 
 async function startScheduler() {
-  console.log('Prediction scheduler started');
+  console.log('Prediction scheduler started (3h cycle, smart rotation)');
 
+  // Generate on startup
   const active = await db.getActivePredictions();
-  if (active.length < 5) {
-    await generateDailyPredictions();
+  if (active.length < 15) {
+    await smartGenerate();
   }
 
+  // Main cycle: every 3 hours
   setInterval(async () => {
     await cleanupExpired();
-    const active = await db.getActivePredictions();
-    if (active.length < 8) {
-      await generateDailyPredictions();
-    }
-  }, 8 * 60 * 60 * 1000);
+    await smartGenerate();
+  }, 3 * 60 * 60 * 1000);
 
+  // Hourly check: emergency fill if running low
   setInterval(async () => {
     await cleanupExpired();
+    const current = await db.getActivePredictions();
+    if (current.length < 10) {
+      console.log('LOW CONTENT ALERT - emergency generation...');
+      await smartGenerate();
+    }
   }, 60 * 60 * 1000);
 }
+
+// Backward compatibility
+async function generateDailyPredictions() {
+  return smartGenerate();
+}
+
+// ============================================
+// UTILS
+// ============================================
 
 function pickRandom(arr, count) {
   const shuffled = [...arr].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, count);
-}
-
-function randomHours(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 function expires(hours) {
