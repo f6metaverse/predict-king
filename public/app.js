@@ -3,6 +3,15 @@ const tg = window.Telegram?.WebApp;
 let currentUser = null;
 let currentCategory = 'all';
 
+// Secure fetch helper — sends Telegram auth data with every request
+function secureHeaders() {
+  const headers = { 'Content-Type': 'application/json' };
+  if (tg?.initData) {
+    headers['X-Telegram-Init-Data'] = tg.initData;
+  }
+  return headers;
+}
+
 // Init
 document.addEventListener('DOMContentLoaded', async () => {
   if (tg) {
@@ -48,7 +57,7 @@ async function initUser() {
   try {
     const res = await fetch('/api/user', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: secureHeaders(),
       body: JSON.stringify(userData)
     });
     currentUser = await res.json();
@@ -238,7 +247,7 @@ async function vote(predictionId, choice) {
   try {
     const res = await fetch('/api/vote', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: secureHeaders(),
       body: JSON.stringify({
         predictionId,
         userId: currentUser.id,
@@ -391,7 +400,7 @@ async function checkDailyBonus() {
     try {
       const res = await fetch('/api/daily-bonus', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: secureHeaders(),
         body: JSON.stringify({ userId: currentUser.id })
       });
       const data = await res.json();
@@ -463,7 +472,7 @@ async function loadProfile() {
   if (!currentUser?.id) return;
 
   try {
-    const res = await fetch(`/api/user/${currentUser.id}`);
+    const res = await fetch(`/api/user/${currentUser.id}`, { headers: secureHeaders() });
     const user = await res.json();
     currentUser = { ...currentUser, ...user };
 
@@ -508,7 +517,7 @@ async function loadHistory() {
   list.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
 
   try {
-    const res = await fetch(`/api/history/${currentUser.id}`);
+    const res = await fetch(`/api/history/${currentUser.id}`, { headers: secureHeaders() });
     const history = await res.json();
 
     if (history.length === 0) {
@@ -634,7 +643,7 @@ function setupAdButton() {
         // Ad watched successfully, reward the user
         const res = await fetch('/api/ad-reward', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: secureHeaders(),
           body: JSON.stringify({ userId: currentUser.id })
         });
         const data = await res.json();
@@ -743,7 +752,7 @@ async function postComment(predictionId) {
   try {
     const res = await fetch('/api/comments', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: secureHeaders(),
       body: JSON.stringify({
         predictionId,
         userId: currentUser.id,

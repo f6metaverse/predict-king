@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
+const crypto = require('crypto');
 const TelegramBot = require('node-telegram-bot-api');
 const db = require('./db');
 const { startScheduler, generateDailyPredictions } = require('./predictions-engine');
@@ -10,6 +11,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const APP_URL = process.env.APP_URL || `http://localhost:${PORT}`;
+const ADMIN_SECRET = process.env.ADMIN_SECRET || 'predict-king-admin-2026';
 
 // Telegram Bot
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
@@ -18,9 +20,116 @@ setBot(bot);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ============================================
+// SECURITY MIDDLEWARE
+// ============================================
+
+// Validate Telegram WebApp initData (official Telegram signature check)
+function validateTelegramData(initData) {
+  if (!initData) return null;
+  try {
+    const params = new URLSearchParams(initData);
+    const hash = params.get('hash');
+    if (!hash) return null;
+
+    // Remove hash from params and sort alphabetically
+    params.delete('hash');
+    const dataCheckArr = [];
+    for (const [key, value] of [...params.entries()].sort()) {
+      dataCheckArr.push(`${key}=${value}`);
+    }
+    const dataCheckString = dataCheckArr.join('\n');
+
+    // Create HMAC with bot token
+    const secretKey = crypto.createHmac('sha256', 'WebAppData').update(BOT_TOKEN).digest();
+    const computedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+
+    if (computedHash !== hash) return null;
+
+    // Check if data is not too old (allow 24h for Mini Apps that stay open)
+    const authDate = parseInt(params.get('auth_date'));
+    if (authDate && Date.now() / 1000 - authDate > 86400) return null;
+
+    // Extract user
+    const userStr = params.get('user');
+    if (!userStr) return null;
+    return JSON.parse(userStr);
+  } catch (e) {
+    return null;
+  }
+}
+
+// Middleware: require valid Telegram user for user-facing routes
+function requireTelegramUser(req, res, next) {
+  const initData = req.headers['x-telegram-init-data'];
+
+  // Validate Telegram signature
+  const tgUser = validateTelegramData(initData);
+  if (tgUser) {
+    req.telegramUser = tgUser;
+    req.validatedUserId = tgUser.id.toString();
+    return next();
+  }
+
+  // Dev mode fallback (only if no ADMIN_SECRET is set in env = local dev)
+  if (!process.env.ADMIN_SECRET) {
+    return next();
+  }
+
+  return res.status(403).json({ error: 'Invalid Telegram authentication' });
+}
+
+// Middleware: require admin secret for dangerous routes
+function requireAdmin(req, res, next) {
+  const secret = req.headers['x-admin-secret'] || req.body?.adminSecret;
+  if (secret === ADMIN_SECRET) {
+    return next();
+  }
+  return res.status(403).json({ error: 'Unauthorized' });
+}
+
+// Rate limiter — prevent spam/abuse
+const rateLimits = {};
+function rateLimit(maxRequests, windowMs) {
+  return (req, res, next) => {
+    const key = req.validatedUserId || req.ip;
+    const now = Date.now();
+
+    if (!rateLimits[key]) {
+      rateLimits[key] = { count: 1, resetAt: now + windowMs };
+      return next();
+    }
+
+    if (now > rateLimits[key].resetAt) {
+      rateLimits[key] = { count: 1, resetAt: now + windowMs };
+      return next();
+    }
+
+    rateLimits[key].count++;
+    if (rateLimits[key].count > maxRequests) {
+      return res.status(429).json({ error: 'Too many requests, slow down' });
+    }
+    return next();
+  };
+}
+
+// Clean up rate limit entries every 10 min
+setInterval(() => {
+  const now = Date.now();
+  for (const key of Object.keys(rateLimits)) {
+    if (now > rateLimits[key].resetAt) delete rateLimits[key];
+  }
+}, 10 * 60 * 1000);
+
+// Input sanitizer — strip HTML/scripts from user input
+function sanitize(str) {
+  if (typeof str !== 'string') return str;
+  return str.replace(/[<>]/g, '').trim();
+}
+
 // --- API Routes ---
 
-// Get active predictions
+// Get active predictions (public — no auth needed, it's read-only)
 app.get('/api/predictions', async (req, res) => {
   try {
     const predictions = await db.getActivePredictions();
@@ -43,11 +152,16 @@ app.get('/api/predictions', async (req, res) => {
   }
 });
 
-// Vote on a prediction
-app.post('/api/vote', async (req, res) => {
-  const { predictionId, userId, choice } = req.body;
+// Vote on a prediction (requires Telegram auth + rate limited)
+app.post('/api/vote', requireTelegramUser, rateLimit(30, 60000), async (req, res) => {
+  const { predictionId, choice } = req.body;
+  // Use validated userId from Telegram, not from body (prevents spoofing)
+  const userId = req.validatedUserId || req.body.userId;
   if (!predictionId || !userId || !choice) {
     return res.status(400).json({ error: 'Missing fields' });
+  }
+  if (choice !== 'A' && choice !== 'B') {
+    return res.status(400).json({ error: 'Invalid choice' });
   }
 
   try {
@@ -82,10 +196,15 @@ app.post('/api/vote', async (req, res) => {
   }
 });
 
-// Get user profile
-app.get('/api/user/:id', async (req, res) => {
+// Get user profile (requires Telegram auth — users can only see their own profile)
+app.get('/api/user/:id', requireTelegramUser, async (req, res) => {
   try {
-    const user = await db.getUser(req.params.id);
+    // Users can only access their own profile
+    const requestedId = req.params.id;
+    if (req.validatedUserId && req.validatedUserId !== requestedId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    const user = await db.getUser(requestedId);
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(user);
   } catch (e) {
@@ -94,16 +213,21 @@ app.get('/api/user/:id', async (req, res) => {
   }
 });
 
-// Register / update user
-app.post('/api/user', async (req, res) => {
-  const { id, username, firstName, referredBy } = req.body;
+// Register / update user (requires Telegram auth)
+app.post('/api/user', requireTelegramUser, async (req, res) => {
+  // Use validated Telegram ID, not user-supplied ID
+  const id = req.validatedUserId || req.body.id;
+  const { username, firstName, referredBy } = req.body;
   if (!id) return res.status(400).json({ error: 'Missing user id' });
 
   try {
     let existingUser = await db.getUser(id);
     const isNew = !existingUser;
 
-    const user = await db.createOrUpdateUser(id, { username, firstName });
+    const user = await db.createOrUpdateUser(id, {
+      username: sanitize(username),
+      firstName: sanitize(firstName)
+    });
 
     // Handle referral
     if (isNew && referredBy && referredBy !== id) {
@@ -125,9 +249,9 @@ app.post('/api/user', async (req, res) => {
   }
 });
 
-// Daily bonus
-app.post('/api/daily-bonus', async (req, res) => {
-  const { userId } = req.body;
+// Daily bonus (requires Telegram auth + rate limited)
+app.post('/api/daily-bonus', requireTelegramUser, rateLimit(5, 60000), async (req, res) => {
+  const userId = req.validatedUserId || req.body.userId;
   if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
   try {
@@ -175,8 +299,8 @@ app.get('/api/leaderboard', async (req, res) => {
   }
 });
 
-// Resolve a prediction (admin)
-app.post('/api/resolve', async (req, res) => {
+// Resolve a prediction (ADMIN ONLY)
+app.post('/api/resolve', requireAdmin, async (req, res) => {
   const { predictionId, result } = req.body;
   if (!predictionId || !result) return res.status(400).json({ error: 'Missing fields' });
 
@@ -214,8 +338,8 @@ app.post('/api/resolve', async (req, res) => {
   }
 });
 
-// Add prediction (admin)
-app.post('/api/predictions', async (req, res) => {
+// Add prediction (ADMIN ONLY)
+app.post('/api/predictions', requireAdmin, async (req, res) => {
   const { question, category, optionA, optionB, emoji, expiresAt } = req.body;
   if (!question || !optionA || !optionB) {
     return res.status(400).json({ error: 'Missing fields' });
@@ -236,9 +360,9 @@ app.post('/api/predictions', async (req, res) => {
   }
 });
 
-// Ad reward
-app.post('/api/ad-reward', async (req, res) => {
-  const { userId } = req.body;
+// Ad reward (requires Telegram auth + rate limited to prevent abuse)
+app.post('/api/ad-reward', requireTelegramUser, rateLimit(10, 60000), async (req, res) => {
+  const userId = req.validatedUserId || req.body.userId;
   if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
   try {
@@ -257,8 +381,8 @@ app.post('/api/ad-reward', async (req, res) => {
   }
 });
 
-// Force regenerate predictions (admin)
-app.post('/api/generate', async (req, res) => {
+// Force regenerate predictions (ADMIN ONLY)
+app.post('/api/generate', requireAdmin, async (req, res) => {
   try {
     const count = await generateDailyPredictions();
     res.json({ success: true, generated: count });
@@ -268,8 +392,8 @@ app.post('/api/generate', async (req, res) => {
   }
 });
 
-// Reset predictions (admin)
-app.post('/api/reset-predictions', async (req, res) => {
+// Reset predictions (ADMIN ONLY)
+app.post('/api/reset-predictions', requireAdmin, async (req, res) => {
   try {
     await db.resetPredictions();
     const count = await generateDailyPredictions();
@@ -304,9 +428,10 @@ app.get('/api/comments/:predictionId', async (req, res) => {
   }
 });
 
-// Post a comment
-app.post('/api/comments', async (req, res) => {
-  const { predictionId, userId, text } = req.body;
+// Post a comment (requires Telegram auth + rate limited + sanitized)
+app.post('/api/comments', requireTelegramUser, rateLimit(10, 60000), async (req, res) => {
+  const { predictionId, text } = req.body;
+  const userId = req.validatedUserId || req.body.userId;
   if (!predictionId || !userId || !text) {
     return res.status(400).json({ error: 'Missing fields' });
   }
@@ -321,7 +446,7 @@ app.post('/api/comments', async (req, res) => {
       userId,
       user?.username || '',
       user?.firstName || 'Player',
-      text.trim()
+      sanitize(text)
     );
     res.json(comment);
   } catch (e) {
@@ -502,8 +627,8 @@ function startBroadcastScheduler() {
   }, 30 * 60 * 1000);
 }
 
-// Admin endpoint to trigger broadcast manually
-app.post('/api/broadcast', async (req, res) => {
+// Admin endpoint to trigger broadcast manually (ADMIN ONLY)
+app.post('/api/broadcast', requireAdmin, async (req, res) => {
   try {
     await broadcastHotPredictions();
     res.json({ success: true });
