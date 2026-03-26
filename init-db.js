@@ -45,7 +45,8 @@ async function initDatabase() {
         result TEXT,
         expires_at TIMESTAMPTZ NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW(),
-        resolved_at TIMESTAMPTZ
+        resolved_at TIMESTAMPTZ,
+        metadata JSONB DEFAULT '{}'
       );
     `);
     console.log('  predictions table OK');

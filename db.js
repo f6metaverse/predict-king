@@ -126,9 +126,9 @@ async function getPrediction(id) {
 async function addPrediction(prediction) {
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const { rows } = await pool.query(
-    `INSERT INTO predictions (id, question, category, option_a, option_b, emoji, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [id, prediction.question, prediction.category || 'general', prediction.optionA, prediction.optionB, prediction.emoji || '', prediction.expiresAt]
+    `INSERT INTO predictions (id, question, category, option_a, option_b, emoji, expires_at, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    [id, prediction.question, prediction.category || 'general', prediction.optionA, prediction.optionB, prediction.emoji || '', prediction.expiresAt, JSON.stringify(prediction.metadata || {})]
   );
   return formatPrediction(rows[0]);
 }
@@ -156,7 +156,8 @@ function formatPrediction(row) {
     result: row.result,
     expiresAt: row.expires_at,
     createdAt: row.created_at,
-    resolvedAt: row.resolved_at
+    resolvedAt: row.resolved_at,
+    metadata: row.metadata || {}
   };
 }
 

@@ -1,8 +1,9 @@
 const db = require('./db');
 
 // ============================================
-// PREDICT KING - AUTO-GENERATION ENGINE v2
-// Maximum LIVE content, smart API rotation
+// PREDICT KING - AUTO-GENERATION ENGINE v3
+// REAL PREDICTIONS — fetch upcoming events 7 days ahead
+// Expiration = event kickoff time
 // ============================================
 
 const FOOTBALL_API_KEY = process.env.FOOTBALL_API_KEY || '';
@@ -10,28 +11,60 @@ const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY || '';
 const NEWS_API_KEY = process.env.NEWS_API_KEY || '';
 
 // ============================================
-// DURATION CONFIG (in hours)
+// UTILS
 // ============================================
-const DURATION = {
-  FLASH: 4,
-  SHORT: 6,
-  MEDIUM: 8,
-  SPORT_LIVE: 12,
-  NEWS: 12,
-  CRYPTO_PRICE: 8,
-  LONG: 24,
-  EVENT: 48
-};
+
+function pickRandom(arr, count) {
+  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
+
+// Get current football season (Aug+ = current year, before Aug = previous year)
+function getCurrentSeason() {
+  const now = new Date();
+  return now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+}
+
+// Generate array of date strings for the next N days
+function getNextDays(n) {
+  const dates = [];
+  for (let i = 0; i <= n; i++) {
+    const d = new Date(Date.now() + i * 86400000);
+    dates.push(d.toISOString().split('T')[0]);
+  }
+  return dates;
+}
+
+// Format a date nicely for display: "Sat Mar 28, 21:00"
+function formatMatchDate(isoDate) {
+  const d = new Date(isoDate);
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const hours = d.getUTCHours().toString().padStart(2, '0');
+  const mins = d.getUTCMinutes().toString().padStart(2, '0');
+  return `${days[d.getUTCDay()]} ${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${hours}:${mins}`;
+}
+
+// Set expiration to 5 minutes before kickoff (close voting before the event)
+function expiresAtKickoff(kickoffISO) {
+  const kickoff = new Date(kickoffISO);
+  return new Date(kickoff.getTime() - 5 * 60 * 1000).toISOString();
+}
+
+// Fallback expiration for events without precise kickoff
+function expiresInHours(hours) {
+  return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+}
 
 // Min active predictions per category
 const MIN_SLOTS = {
   crypto: 3,
-  football: 2,
+  football: 3,
   nba: 2,
   combat: 1,
-  f1: 1,
+  f1: 2,
   nfl: 1,
-  hockey: 1,
+  hockey: 2,
   rugby: 1,
   musique: 2,
   gaming: 2,
@@ -46,77 +79,61 @@ const MIN_SLOTS = {
 };
 
 // ============================================
-// ROTATION SYSTEM for API-Sports
-// Cycle through groups to spread API usage
+// ROTATION SYSTEM for API-Sports (quota: 100/day)
+// Each sport generator uses 1-2 API calls max
 // ============================================
 let apiSportsCycleIndex = 0;
 
 const API_SPORTS_ROTATION = [
-  // Cycle 0: Football + NBA (most popular)
   ['football', 'nba'],
-  // Cycle 1: Hockey + Combat
   ['hockey', 'combat'],
-  // Cycle 2: Football + NFL
   ['football', 'nfl'],
-  // Cycle 3: NBA + Rugby + F1
   ['nba', 'rugby', 'f1'],
-  // Cycle 4: Football + Hockey
   ['football', 'hockey'],
-  // Cycle 5: Combat + NFL + F1
   ['combat', 'nfl', 'f1'],
-  // Cycle 6: Football + NBA (repeat popular)
   ['football', 'nba'],
-  // Cycle 7: All minor sports catch-up
   ['hockey', 'rugby', 'combat'],
 ];
 
-// Rotation for NewsData categories
+// News rotation
 let newsCycleIndex = 0;
 
 const NEWS_ROTATION = [
-  // Cycle 0: Crypto + Entertainment + Top
   [
     { category: 'business', q: 'crypto%20OR%20bitcoin%20OR%20ethereum', predCat: 'crypto', emoji: '📰' },
     { category: 'entertainment', q: 'music%20OR%20album%20OR%20rapper%20OR%20singer%20OR%20spotify', predCat: 'musique', emoji: '🎵' },
     { category: 'top', q: null, predCat: 'trending', emoji: '🔥' },
   ],
-  // Cycle 1: Tech/Gaming + Politics + World
   [
     { category: 'technology', q: 'gaming%20OR%20playstation%20OR%20xbox%20OR%20GTA%20OR%20fortnite%20OR%20nintendo', predCat: 'gaming', emoji: '🎮' },
     { category: 'politics', q: null, predCat: 'politics', emoji: '🏛' },
     { category: 'world', q: null, predCat: 'world', emoji: '🌍' },
   ],
-  // Cycle 2: Cinema + Science + Crypto
   [
     { category: 'entertainment', q: 'movie%20OR%20Netflix%20OR%20Disney%20OR%20Marvel%20OR%20series%20OR%20streaming', predCat: 'cinema', emoji: '🎬' },
     { category: 'science', q: null, predCat: 'science', emoji: '🔬' },
     { category: 'business', q: 'crypto%20OR%20bitcoin%20OR%20ethereum%20OR%20blockchain', predCat: 'crypto', emoji: '📰' },
   ],
-  // Cycle 3: Drama/Tech + Health + Entertainment
   [
     { category: 'technology', q: 'AI%20OR%20Elon%20Musk%20OR%20Apple%20OR%20TikTok%20OR%20viral%20OR%20influencer', predCat: 'drama', emoji: '👀' },
     { category: 'health', q: null, predCat: 'health', emoji: '💪' },
     { category: 'entertainment', q: 'celebrity%20OR%20award%20OR%20viral%20OR%20trending', predCat: 'trending', emoji: '🔥' },
   ],
-  // Cycle 4: Crypto + Music + Top news
   [
     { category: 'business', q: 'crypto%20OR%20bitcoin%20OR%20solana%20OR%20memecoin', predCat: 'crypto', emoji: '📰' },
     { category: 'entertainment', q: 'concert%20OR%20Grammy%20OR%20rapper%20OR%20kpop%20OR%20album', predCat: 'musique', emoji: '🎵' },
     { category: 'top', q: null, predCat: 'drama', emoji: '👀' },
   ],
-  // Cycle 5: Gaming + World + Politics
   [
     { category: 'technology', q: 'esports%20OR%20Steam%20OR%20gaming%20OR%20VR%20OR%20console', predCat: 'gaming', emoji: '🎮' },
     { category: 'world', q: null, predCat: 'world', emoji: '🌍' },
     { category: 'politics', q: null, predCat: 'politics', emoji: '🏛' },
   ],
-  // Cycle 6: Cinema + Drama + Science
   [
     { category: 'entertainment', q: 'box%20office%20OR%20anime%20OR%20series%20OR%20Netflix%20OR%20HBO', predCat: 'cinema', emoji: '🎬' },
     { category: 'technology', q: 'startup%20OR%20viral%20OR%20controversy%20OR%20scandal', predCat: 'drama', emoji: '👀' },
     { category: 'science', q: 'space%20OR%20NASA%20OR%20discovery%20OR%20breakthrough', predCat: 'science', emoji: '🔬' },
   ],
-  // Cycle 7: Health + Trending + Crypto
   [
     { category: 'health', q: 'fitness%20OR%20mental%20health%20OR%20diet%20OR%20wellness', predCat: 'health', emoji: '💪' },
     { category: 'top', q: null, predCat: 'trending', emoji: '🔥' },
@@ -124,7 +141,7 @@ const NEWS_ROTATION = [
   ],
 ];
 
-// Question formats to keep news-based predictions varied
+// News question formats
 const NEWS_FORMATS = [
   { suffix: ' — Will this matter in a week?', a: 'Big impact', b: 'Already forgotten' },
   { suffix: ' — Agree or disagree?', a: 'Agree', b: 'Disagree' },
@@ -133,166 +150,87 @@ const NEWS_FORMATS = [
   { suffix: ' — W or L?', a: 'Massive W', b: 'Huge L' },
   { suffix: ' — Hit or miss?', a: 'Hit', b: 'Miss' },
   { suffix: ' — Real deal or just noise?', a: 'Real deal', b: 'Just noise' },
-  { suffix: ' — Bullish or bearish?', a: 'Bullish', b: 'Bearish' },
 ];
 
 // ============================================
-// OPINION BACKUP POOLS (for when APIs fail)
-// ============================================
-const OPINION_POOLS = {
-  crypto: [
-    { question: 'Bitcoin to $150K before end of year?', optionA: 'Absolutely', optionB: 'No way', emoji: '₿' },
-    { question: 'Is Solana the Ethereum killer?', optionA: 'SOL wins', optionB: 'ETH forever', emoji: '⚡' },
-    { question: 'Memecoins: genius or gambling?', optionA: 'Genius plays', optionB: 'Pure gambling', emoji: '🐸' },
-    { question: 'Best long-term hold?', optionA: 'Bitcoin', optionB: 'Ethereum', emoji: '💰' },
-    { question: 'NFTs making a comeback?', optionA: 'Comeback loading', optionB: 'Dead forever', emoji: '🖼' },
-    { question: 'DOGE or SHIB: which survives longer?', optionA: 'DOGE', optionB: 'SHIB', emoji: '🐕' },
-    { question: 'Crypto winter coming again?', optionA: 'Winter is here', optionB: 'Bull run continues', emoji: '❄' },
-    { question: 'Best exchange right now?', optionA: 'Binance', optionB: 'Bybit', emoji: '📈' },
-    { question: 'AI + Crypto tokens: legit or scam?', optionA: 'Next big thing', optionB: 'Mostly scams', emoji: '🤖' },
-    { question: 'Layer 2s killing Layer 1s?', optionA: 'L2 is the future', optionB: 'L1 stays king', emoji: '🔗' },
-  ],
-  football: [
-    { question: 'Best player in the world right now?', optionA: 'Haaland', optionB: 'Mbappe', emoji: '⚽' },
-    { question: 'Messi the GOAT or Ronaldo?', optionA: 'Messi', optionB: 'Ronaldo', emoji: '🐐' },
-    { question: 'Real Madrid winning another UCL?', optionA: 'Obviously', optionB: 'Not this time', emoji: '🏆' },
-    { question: 'Best young talent in football?', optionA: 'Lamine Yamal', optionB: 'Bellingham', emoji: '⭐' },
-    { question: 'VAR: good or bad for football?', optionA: 'Good', optionB: 'Ruining it', emoji: '📺' },
-    { question: 'Who wins the World Cup 2026?', optionA: 'France', optionB: 'Argentina', emoji: '🏆' },
-    { question: 'Saudi League becoming top 5?', optionA: 'In 5 years yes', optionB: 'Never serious', emoji: '🇸🇦' },
-    { question: 'Best manager alive?', optionA: 'Guardiola', optionB: 'Ancelotti', emoji: '🧠' },
-  ],
-  nba: [
-    { question: 'Best player in the NBA?', optionA: 'Wembanyama', optionB: 'Jokic', emoji: '🏀' },
-    { question: 'LeBron top 1 all time?', optionA: 'GOAT', optionB: 'MJ first', emoji: '🏀' },
-    { question: 'Steph Curry: greatest shooter ever?', optionA: 'No debate', optionB: 'Overrated take', emoji: '🎯' },
-    { question: 'Lakers making playoffs?', optionA: 'They find a way', optionB: 'Lottery bound', emoji: '🏀' },
-    { question: '3-point era ruining basketball?', optionA: 'It\'s boring now', optionB: 'Evolution', emoji: '🏀' },
-  ],
-  combat: [
-    { question: 'Jon Jones the MMA GOAT?', optionA: 'Undisputed', optionB: 'Overrated', emoji: '🥊' },
-    { question: 'Boxing or MMA: better sport?', optionA: 'Boxing', optionB: 'MMA', emoji: '🥊' },
-    { question: 'Islam Makhachev losing this year?', optionA: 'Someone beats him', optionB: 'Unbeatable', emoji: '🥊' },
-    { question: 'Best pound-for-pound fighter?', optionA: 'Islam Makhachev', optionB: 'Alex Pereira', emoji: '🏆' },
-  ],
-  f1: [
-    { question: 'Verstappen winning another title?', optionA: 'Unstoppable', optionB: 'Competition caught up', emoji: '🏎' },
-    { question: 'Hamilton regretting Ferrari?', optionA: 'Big mistake', optionB: 'Best move ever', emoji: '🏎' },
-    { question: 'Norris becoming world champion?', optionA: 'Next in line', optionB: 'Not in this era', emoji: '🏎' },
-  ],
-  nfl: [
-    { question: 'Mahomes the GOAT QB?', optionA: 'Already is', optionB: 'Needs more rings', emoji: '🏈' },
-    { question: 'Cowboys ever winning another Super Bowl?', optionA: 'Someday', optionB: 'Never again', emoji: '🏈' },
-  ],
-  hockey: [
-    { question: 'McDavid the best hockey player ever?', optionA: 'Generational', optionB: 'Gretzky untouchable', emoji: '🏒' },
-    { question: 'A Canadian team winning the Cup this year?', optionA: 'This is the year', optionB: 'Nope', emoji: '🏒' },
-  ],
-  rugby: [
-    { question: 'Best rugby nation?', optionA: 'New Zealand', optionB: 'South Africa', emoji: '🏉' },
-    { question: 'Rugby growing or dying?', optionA: 'Growing fast', optionB: 'Struggling', emoji: '🏉' },
-  ],
-  musique: [
-    { question: 'Drake or Kendrick: who wins?', optionA: 'Drake', optionB: 'Kendrick', emoji: '🎵' },
-    { question: 'Biggest artist in the world?', optionA: 'Taylor Swift', optionB: 'Bad Bunny', emoji: '🎵' },
-    { question: 'K-Pop taking over?', optionA: 'Already did', optionB: 'Overhyped', emoji: '🇰🇷' },
-    { question: 'Best rapper alive?', optionA: 'Kendrick', optionB: 'J. Cole', emoji: '🎤' },
-  ],
-  gaming: [
-    { question: 'GTA 6 living up to the hype?', optionA: 'Legendary', optionB: 'Overhyped', emoji: '🎮' },
-    { question: 'PC or Console?', optionA: 'PC master race', optionB: 'Console vibes', emoji: '🎮' },
-    { question: 'PS5 or Xbox?', optionA: 'PlayStation', optionB: 'Xbox', emoji: '🎮' },
-    { question: 'Nintendo Switch 2: day one buy?', optionA: 'Day one', optionB: 'Wait', emoji: '🎮' },
-  ],
-  cinema: [
-    { question: 'Marvel done or coming back?', optionA: 'Comeback arc', optionB: 'Fatigue is real', emoji: '🎬' },
-    { question: 'Netflix or Disney+?', optionA: 'Netflix', optionB: 'Disney+', emoji: '📺' },
-    { question: 'Anime mainstream now?', optionA: 'Fully mainstream', optionB: 'Still niche', emoji: '🎌' },
-  ],
-  drama: [
-    { question: 'Elon Musk: genius or villain?', optionA: 'Genius', optionB: 'Villain arc', emoji: '👀' },
-    { question: 'AI taking your job in 5 years?', optionA: 'Probably', optionB: 'Humans irreplaceable', emoji: '🤖' },
-    { question: 'TikTok: creative or brain rot?', optionA: 'Creative', optionB: 'Brain rot', emoji: '📱' },
-  ],
-  politics: [
-    { question: 'USA staying the superpower?', optionA: 'USA forever', optionB: 'China catching up', emoji: '🏛' },
-    { question: 'EU getting stronger or weaker?', optionA: 'Stronger', optionB: 'Falling apart', emoji: '🇪🇺' },
-  ],
-  world: [
-    { question: 'Climate change: still fixable?', optionA: 'If we act now', optionB: 'Too late', emoji: '🌍' },
-    { question: 'Global economy: growth or recession?', optionA: 'Growth', optionB: 'Recession', emoji: '📉' },
-  ],
-  science: [
-    { question: 'AI achieving AGI before 2030?', optionA: 'Definitely', optionB: 'Way further out', emoji: '🔬' },
-    { question: 'Humans on Mars before 2035?', optionA: 'SpaceX delivers', optionB: 'Too ambitious', emoji: '🚀' },
-  ],
-  health: [
-    { question: 'Ozempic: game changer or dangerous?', optionA: 'Game changer', optionB: 'Risky shortcut', emoji: '💪' },
-    { question: 'Sleep or exercise: more important?', optionA: 'Sleep', optionB: 'Exercise', emoji: '😴' },
-  ],
-  trending: [
-    { question: 'What breaks the internet this week?', optionA: 'Celebrity drama', optionB: 'Tech news', emoji: '🔥' },
-    { question: 'Internet culture: golden age or downfall?', optionA: 'Golden age', optionB: 'Getting worse', emoji: '🔥' },
-  ],
-  debate: [
-    { question: 'Morning person or night owl?', optionA: 'Early bird', optionB: 'Night owl', emoji: '🌅' },
-    { question: 'Cats or dogs?', optionA: 'Dogs forever', optionB: 'Cats superior', emoji: '🐾' },
-    { question: 'Android or iPhone?', optionA: 'Android', optionB: 'iPhone', emoji: '📱' },
-    { question: 'Pineapple on pizza?', optionA: 'Delicious', optionB: 'Crime', emoji: '🍕' },
-    { question: 'University worth it in 2026?', optionA: 'Still essential', optionB: 'Overpriced paper', emoji: '🎓' },
-    { question: '4-day work week: realistic?', optionA: 'The future', optionB: 'Dream on', emoji: '💼' },
-  ]
-};
-
-// ============================================
 // API-SPORTS GENERATORS
+// All fetch 7 days ahead, expire at kickoff
 // ============================================
+
+// Top football leagues to prioritize
+const TOP_FOOTBALL_LEAGUES = [39, 140, 61, 135, 2, 78, 253, 262, 3, 848, 1, 4, 5];
 
 async function generateFootballLive() {
   const predictions = [];
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    const today = new Date().toISOString().split('T')[0];
-    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+    const dates = getNextDays(6);
+    const fromDate = dates[0];
+    const toDate = dates[dates.length - 1];
+    const season = getCurrentSeason();
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
 
-    const res1 = await fetch(`https://v3.football.api-sports.io/fixtures?date=${today}&season=2025`, { headers });
-    const data1 = await res1.json();
-    let allMatches = [...(data1.response || [])];
+    // 1 API call for 7 days of fixtures
+    const res = await fetch(`https://v3.football.api-sports.io/fixtures?from=${fromDate}&to=${toDate}&season=${season}`, { headers });
+    const data = await res.json();
 
-    // Only fetch tomorrow if today is thin
-    if (allMatches.length < 4) {
-      const res2 = await fetch(`https://v3.football.api-sports.io/fixtures?date=${tomorrow}&season=2025`, { headers });
-      const data2 = await res2.json();
-      allMatches.push(...(data2.response || []));
-    }
+    if (!data.response) return predictions;
 
-    const topLeagues = [39, 140, 61, 135, 2, 78, 253, 262];
-    const topMatches = allMatches.filter(m => topLeagues.includes(m.league?.id));
-    const matches = topMatches.length > 0 ? topMatches : allMatches;
+    // Prioritize top leagues, then fill with others
+    const topMatches = data.response.filter(m => TOP_FOOTBALL_LEAGUES.includes(m.league?.id));
+    const otherMatches = data.response.filter(m => !TOP_FOOTBALL_LEAGUES.includes(m.league?.id));
+    const allMatches = [...topMatches, ...otherMatches];
 
-    for (const match of matches.slice(0, 6)) {
+    // Only upcoming matches (not started/finished)
+    const upcoming = allMatches.filter(m =>
+      m.fixture?.status?.short === 'NS' || m.fixture?.status?.short === 'TBD'
+    );
+
+    for (const match of upcoming.slice(0, 12)) {
       const home = match.teams.home.name;
       const away = match.teams.away.name;
       const league = match.league.name;
+      const kickoff = match.fixture.date;
+      const fixtureId = match.fixture.id;
+      const dateStr = formatMatchDate(kickoff);
+
+      const baseMetadata = {
+        fixtureId,
+        kickoff,
+        apiType: 'football',
+        homeTeam: home,
+        awayTeam: away
+      };
 
       const templates = [
-        { question: `${league}: ${home} vs ${away} — Who wins?`, optionA: home, optionB: away },
-        { question: `${home} vs ${away}: Over 2.5 goals?`, optionA: 'YES', optionB: 'NO' },
-        { question: `Clean sheet for ${home} against ${away}?`, optionA: 'YES', optionB: 'NO' },
+        {
+          question: `⚽ ${league}: ${home} vs ${away} — Who wins? (${dateStr})`,
+          optionA: home, optionB: away,
+          metadata: { ...baseMetadata, predType: 'winner' }
+        },
+        {
+          question: `⚽ ${home} vs ${away}: Over 2.5 goals? (${dateStr})`,
+          optionA: 'YES', optionB: 'NO',
+          metadata: { ...baseMetadata, predType: 'over_goals', threshold: 2.5 }
+        },
+        {
+          question: `⚽ Clean sheet for ${home} vs ${away}? (${dateStr})`,
+          optionA: 'YES', optionB: 'NO',
+          metadata: { ...baseMetadata, predType: 'clean_sheet', teamRef: 'home' }
+        },
       ];
 
       predictions.push({
         ...templates[Math.floor(Math.random() * templates.length)],
         category: 'football', emoji: '⚽',
-        expiresAt: expires(DURATION.SPORT_LIVE)
+        expiresAt: expiresAtKickoff(kickoff)
       });
     }
   } catch (e) {
     console.error('Football API error:', e.message);
   }
-  return pickRandom(predictions, 4);
+  return pickRandom(predictions, 5);
 }
 
 async function generateNBALive() {
@@ -300,32 +238,67 @@ async function generateNBALive() {
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    const today = new Date().toISOString().split('T')[0];
-    const res = await fetch(`https://v1.basketball.api-sports.io/games?date=${today}`, {
-      headers: { 'x-apisports-key': FOOTBALL_API_KEY }
-    });
-    const data = await res.json();
+    const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
+    const dates = getNextDays(6);
 
-    if (data.response) {
-      const nbaGames = data.response.filter(g => g.league?.name?.includes('NBA'));
-      for (const game of nbaGames.slice(0, 4)) {
-        const home = game.teams.home.name;
-        const away = game.teams.away.name;
-        const templates = [
-          { question: `NBA: ${home} vs ${away} — Who wins?`, optionA: home, optionB: away },
-          { question: `${home} vs ${away}: Over 220 combined points?`, optionA: 'YES', optionB: 'NO' },
-        ];
-        predictions.push({
-          ...templates[Math.floor(Math.random() * templates.length)],
-          category: 'nba', emoji: '🏀',
-          expiresAt: expires(DURATION.SPORT_LIVE)
-        });
+    // Fetch next 4 days to cover upcoming games (4 API calls)
+    const datesToFetch = dates.slice(0, 4);
+    const allGames = [];
+
+    for (const date of datesToFetch) {
+      try {
+        const res = await fetch(`https://v1.basketball.api-sports.io/games?date=${date}`, { headers });
+        const data = await res.json();
+        if (data.response) {
+          const nbaGames = data.response.filter(g =>
+            g.league?.name?.includes('NBA') &&
+            (g.status?.short === 'NS' || g.status?.short === null)
+          );
+          allGames.push(...nbaGames);
+        }
+      } catch (e) {
+        console.error(`NBA fetch error for ${date}:`, e.message);
       }
+    }
+
+    for (const game of allGames.slice(0, 6)) {
+      const home = game.teams.home.name;
+      const away = game.teams.away.name;
+      const kickoff = game.date || game.time;
+      const gameId = game.id;
+      const dateStr = kickoff ? formatMatchDate(kickoff) : datesToFetch[0];
+
+      const baseMetadata = {
+        gameId,
+        kickoff,
+        apiType: 'basketball',
+        homeTeam: home,
+        awayTeam: away
+      };
+
+      const templates = [
+        {
+          question: `🏀 NBA: ${home} vs ${away} — Who wins? (${dateStr})`,
+          optionA: home, optionB: away,
+          metadata: { ...baseMetadata, predType: 'winner' }
+        },
+        {
+          question: `🏀 ${home} vs ${away}: Over 220 combined points? (${dateStr})`,
+          optionA: 'YES', optionB: 'NO',
+          metadata: { ...baseMetadata, predType: 'over_points', threshold: 220 }
+        },
+      ];
+
+      predictions.push({
+        ...templates[Math.floor(Math.random() * templates.length)],
+        category: 'nba', emoji: '🏀',
+        expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(48)
+      });
     }
   } catch (e) {
     console.error('NBA API error:', e.message);
   }
-  return predictions;
+  return pickRandom(predictions, 4);
 }
 
 async function generateNFLLive() {
@@ -333,24 +306,43 @@ async function generateNFLLive() {
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    const today = new Date().toISOString().split('T')[0];
-    const res = await fetch(`https://v1.american-football.api-sports.io/games?date=${today}`, {
-      headers: { 'x-apisports-key': FOOTBALL_API_KEY }
-    });
-    const data = await res.json();
+    const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
+    const dates = getNextDays(6);
 
-    if (data.response) {
-      const nflGames = data.response.filter(g => g.league?.name?.includes('NFL'));
-      for (const game of nflGames.slice(0, 3)) {
-        const home = game.teams.home.name;
-        const away = game.teams.away.name;
-        predictions.push({
-          question: `NFL: ${home} vs ${away} — Who wins?`,
-          optionA: home, optionB: away,
-          category: 'nfl', emoji: '🏈',
-          expiresAt: expires(DURATION.SPORT_LIVE)
-        });
+    const allGames = [];
+    for (const date of dates.slice(0, 4)) {
+      try {
+        const res = await fetch(`https://v1.american-football.api-sports.io/games?date=${date}`, { headers });
+        const data = await res.json();
+        if (data.response) {
+          const nflGames = data.response.filter(g =>
+            g.league?.name?.includes('NFL') &&
+            (g.status?.short === 'NS' || !g.status?.short)
+          );
+          allGames.push(...nflGames);
+        }
+      } catch (e) {
+        console.error(`NFL fetch error for ${date}:`, e.message);
       }
+    }
+
+    for (const game of allGames.slice(0, 4)) {
+      const home = game.teams.home.name;
+      const away = game.teams.away.name;
+      const kickoff = game.date || game.time;
+      const gameId = game.id;
+      const dateStr = kickoff ? formatMatchDate(kickoff) : 'This week';
+
+      predictions.push({
+        question: `🏈 NFL: ${home} vs ${away} — Who wins? (${dateStr})`,
+        optionA: home, optionB: away,
+        category: 'nfl', emoji: '🏈',
+        expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(72),
+        metadata: {
+          gameId, kickoff, apiType: 'american-football',
+          homeTeam: home, awayTeam: away, predType: 'winner'
+        }
+      });
     }
   } catch (e) {
     console.error('NFL API error:', e.message);
@@ -363,29 +355,61 @@ async function generateHockeyLive() {
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    const today = new Date().toISOString().split('T')[0];
-    const res = await fetch(`https://v1.hockey.api-sports.io/games?date=${today}`, {
-      headers: { 'x-apisports-key': FOOTBALL_API_KEY }
-    });
-    const data = await res.json();
+    const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
+    const dates = getNextDays(6);
 
-    if (data.response) {
-      const nhlGames = data.response.filter(g => g.league?.name?.includes('NHL'));
-      for (const game of nhlGames.slice(0, 3)) {
-        const home = game.teams.home.name;
-        const away = game.teams.away.name;
-        predictions.push({
-          question: `NHL: ${home} vs ${away} — Who wins?`,
-          optionA: home, optionB: away,
-          category: 'hockey', emoji: '🏒',
-          expiresAt: expires(DURATION.SPORT_LIVE)
-        });
+    const allGames = [];
+    for (const date of dates.slice(0, 4)) {
+      try {
+        const res = await fetch(`https://v1.hockey.api-sports.io/games?date=${date}`, { headers });
+        const data = await res.json();
+        if (data.response) {
+          const nhlGames = data.response.filter(g =>
+            g.league?.name?.includes('NHL') &&
+            (g.status?.short === 'NS' || !g.status?.short)
+          );
+          allGames.push(...nhlGames);
+        }
+      } catch (e) {
+        console.error(`Hockey fetch error for ${date}:`, e.message);
       }
+    }
+
+    for (const game of allGames.slice(0, 5)) {
+      const home = game.teams.home.name;
+      const away = game.teams.away.name;
+      const kickoff = game.date || game.time;
+      const gameId = game.id;
+      const dateStr = kickoff ? formatMatchDate(kickoff) : 'This week';
+
+      const baseMetadata = {
+        gameId, kickoff, apiType: 'hockey',
+        homeTeam: home, awayTeam: away
+      };
+
+      const templates = [
+        {
+          question: `🏒 NHL: ${home} vs ${away} — Who wins? (${dateStr})`,
+          optionA: home, optionB: away,
+          metadata: { ...baseMetadata, predType: 'winner' }
+        },
+        {
+          question: `🏒 ${home} vs ${away}: Over 5.5 total goals? (${dateStr})`,
+          optionA: 'YES', optionB: 'NO',
+          metadata: { ...baseMetadata, predType: 'over_goals', threshold: 5.5 }
+        },
+      ];
+
+      predictions.push({
+        ...templates[Math.floor(Math.random() * templates.length)],
+        category: 'hockey', emoji: '🏒',
+        expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(48)
+      });
     }
   } catch (e) {
     console.error('Hockey API error:', e.message);
   }
-  return predictions;
+  return pickRandom(predictions, 3);
 }
 
 async function generateCombatLive() {
@@ -393,32 +417,49 @@ async function generateCombatLive() {
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    const res = await fetch('https://v1.mma.api-sports.io/fights?next=5', {
+    const res = await fetch('https://v1.mma.api-sports.io/fights?next=10', {
       headers: { 'x-apisports-key': FOOTBALL_API_KEY }
     });
     const data = await res.json();
 
     if (data.response) {
-      for (const fight of data.response.slice(0, 3)) {
-        if (fight.fighters?.first?.name && fight.fighters?.second?.name) {
-          const f1 = fight.fighters.first.name;
-          const f2 = fight.fighters.second.name;
-          const templates = [
-            { question: `${f1} vs ${f2} — Who wins?`, optionA: f1, optionB: f2 },
-            { question: `${f1} vs ${f2}: KO or Decision?`, optionA: 'KO/TKO', optionB: 'Decision' },
-          ];
-          predictions.push({
-            ...templates[Math.floor(Math.random() * templates.length)],
-            category: 'combat', emoji: '🥊',
-            expiresAt: expires(DURATION.EVENT)
-          });
-        }
+      for (const fight of data.response.slice(0, 5)) {
+        if (!fight.fighters?.first?.name || !fight.fighters?.second?.name) continue;
+        const f1 = fight.fighters.first.name;
+        const f2 = fight.fighters.second.name;
+        const kickoff = fight.date;
+        const fightId = fight.id;
+        const dateStr = kickoff ? formatMatchDate(kickoff) : 'Coming soon';
+
+        const baseMetadata = {
+          fightId, kickoff, apiType: 'mma',
+          fighter1: f1, fighter2: f2
+        };
+
+        const templates = [
+          {
+            question: `🥊 ${f1} vs ${f2} — Who wins? (${dateStr})`,
+            optionA: f1, optionB: f2,
+            metadata: { ...baseMetadata, predType: 'winner' }
+          },
+          {
+            question: `🥊 ${f1} vs ${f2}: KO or Decision? (${dateStr})`,
+            optionA: 'KO/TKO', optionB: 'Decision',
+            metadata: { ...baseMetadata, predType: 'method' }
+          },
+        ];
+
+        predictions.push({
+          ...templates[Math.floor(Math.random() * templates.length)],
+          category: 'combat', emoji: '🥊',
+          expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(72)
+        });
       }
     }
   } catch (e) {
     console.error('MMA API error:', e.message);
   }
-  return predictions;
+  return pickRandom(predictions, 3);
 }
 
 async function generateF1Live() {
@@ -426,32 +467,50 @@ async function generateF1Live() {
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    const res = await fetch('https://v1.formula-1.api-sports.io/races?next=3', {
+    const res = await fetch('https://v1.formula-1.api-sports.io/races?next=5', {
       headers: { 'x-apisports-key': FOOTBALL_API_KEY }
     });
     const data = await res.json();
 
     if (data.response) {
-      for (const race of data.response.slice(0, 2)) {
+      for (const race of data.response.slice(0, 3)) {
         const name = race.competition?.name || 'next race';
+        const kickoff = race.date;
+        const raceId = race.id;
+        const dateStr = kickoff ? formatMatchDate(kickoff) : 'This weekend';
+
+        const baseMetadata = {
+          raceId, kickoff, apiType: 'formula-1',
+          raceName: name
+        };
+
         predictions.push({
-          question: `F1 ${name}: Who takes pole position?`,
+          question: `🏎 F1 ${name}: Who takes pole? (${dateStr})`,
           optionA: 'Verstappen', optionB: 'Someone else',
           category: 'f1', emoji: '🏎',
-          expiresAt: expires(DURATION.EVENT)
+          expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(72),
+          metadata: { ...baseMetadata, predType: 'pole' }
         });
         predictions.push({
-          question: `Safety Car at the ${name}?`,
+          question: `🏎 F1 ${name}: Safety Car? (${dateStr})`,
           optionA: 'YES', optionB: 'NO',
           category: 'f1', emoji: '🏎',
-          expiresAt: expires(DURATION.EVENT)
+          expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(72),
+          metadata: { ...baseMetadata, predType: 'safety_car' }
+        });
+        predictions.push({
+          question: `🏎 F1 ${name}: Who wins the race? (${dateStr})`,
+          optionA: 'Verstappen', optionB: 'Norris',
+          category: 'f1', emoji: '🏎',
+          expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(72),
+          metadata: { ...baseMetadata, predType: 'race_winner' }
         });
       }
     }
   } catch (e) {
     console.error('F1 API error:', e.message);
   }
-  return predictions;
+  return pickRandom(predictions, 3);
 }
 
 async function generateRugbyLive() {
@@ -459,28 +518,47 @@ async function generateRugbyLive() {
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    const today = new Date().toISOString().split('T')[0];
-    const res = await fetch(`https://v1.rugby.api-sports.io/games?date=${today}`, {
-      headers: { 'x-apisports-key': FOOTBALL_API_KEY }
-    });
-    const data = await res.json();
+    const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
+    const dates = getNextDays(6);
 
-    if (data.response) {
-      for (const game of data.response.slice(0, 3)) {
-        const home = game.teams.home.name;
-        const away = game.teams.away.name;
-        predictions.push({
-          question: `Rugby: ${home} vs ${away} — Who wins?`,
-          optionA: home, optionB: away,
-          category: 'rugby', emoji: '🏉',
-          expiresAt: expires(DURATION.SPORT_LIVE)
-        });
+    const allGames = [];
+    for (const date of dates.slice(0, 4)) {
+      try {
+        const res = await fetch(`https://v1.rugby.api-sports.io/games?date=${date}`, { headers });
+        const data = await res.json();
+        if (data.response) {
+          const games = data.response.filter(g =>
+            g.status?.short === 'NS' || !g.status?.short
+          );
+          allGames.push(...games);
+        }
+      } catch (e) {
+        console.error(`Rugby fetch error for ${date}:`, e.message);
       }
+    }
+
+    for (const game of allGames.slice(0, 4)) {
+      const home = game.teams.home.name;
+      const away = game.teams.away.name;
+      const kickoff = game.date || game.time;
+      const gameId = game.id;
+      const dateStr = kickoff ? formatMatchDate(kickoff) : 'This week';
+
+      predictions.push({
+        question: `🏉 Rugby: ${home} vs ${away} — Who wins? (${dateStr})`,
+        optionA: home, optionB: away,
+        category: 'rugby', emoji: '🏉',
+        expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(48),
+        metadata: {
+          gameId, kickoff, apiType: 'rugby',
+          homeTeam: home, awayTeam: away, predType: 'winner'
+        }
+      });
     }
   } catch (e) {
     console.error('Rugby API error:', e.message);
   }
-  return predictions;
+  return pickRandom(predictions, 2);
 }
 
 // Map sport names to their generators
@@ -495,7 +573,7 @@ const SPORT_GENERATORS = {
 };
 
 // ============================================
-// CRYPTO LIVE PRICE (CoinGecko - generous quota)
+// CRYPTO LIVE PRICE (CoinGecko)
 // ============================================
 
 async function generateCryptoLive() {
@@ -540,7 +618,8 @@ async function generateCryptoLive() {
       predictions.push({
         ...templates[Math.floor(Math.random() * templates.length)],
         category: 'crypto', emoji: coin.emoji,
-        expiresAt: expires(DURATION.CRYPTO_PRICE)
+        expiresAt: expiresInHours(8),
+        metadata: { coinId: coin.id, symbol: coin.symbol, priceAtCreation: price, target: parseFloat(target) }
       });
     }
   } catch (e) {
@@ -569,10 +648,7 @@ async function generateFromNews(newsConfig) {
         if (!article.title || article.title.length < 15) continue;
         const title = article.title.slice(0, 75);
 
-        // Pick a random format
         const fmt = NEWS_FORMATS[Math.floor(Math.random() * NEWS_FORMATS.length)];
-
-        // Use bullish/bearish specifically for crypto
         const finalFmt = newsConfig.predCat === 'crypto'
           ? { suffix: ' — Bullish or bearish?', a: 'Bullish', b: 'Bearish' }
           : fmt;
@@ -581,7 +657,8 @@ async function generateFromNews(newsConfig) {
           question: `"${title}"${finalFmt.suffix}`,
           optionA: finalFmt.a, optionB: finalFmt.b,
           category: newsConfig.predCat, emoji: newsConfig.emoji,
-          expiresAt: expires(DURATION.NEWS)
+          expiresAt: expiresInHours(12),
+          metadata: { source: 'newsdata', type: 'opinion' }
         });
       }
     }
@@ -592,18 +669,48 @@ async function generateFromNews(newsConfig) {
 }
 
 // ============================================
-// OPINION BACKUP (free, no API)
+// OPINION BACKUP (minimal — only for non-sport categories when APIs fail)
 // ============================================
+const OPINION_POOLS = {
+  musique: [
+    { question: 'Drake or Kendrick: who wins?', optionA: 'Drake', optionB: 'Kendrick', emoji: '🎵' },
+    { question: 'Biggest artist in the world?', optionA: 'Taylor Swift', optionB: 'Bad Bunny', emoji: '🎵' },
+    { question: 'K-Pop taking over?', optionA: 'Already did', optionB: 'Overhyped', emoji: '🇰🇷' },
+    { question: 'Best rapper alive?', optionA: 'Kendrick', optionB: 'J. Cole', emoji: '🎤' },
+  ],
+  gaming: [
+    { question: 'GTA 6 living up to the hype?', optionA: 'Legendary', optionB: 'Overhyped', emoji: '🎮' },
+    { question: 'PC or Console?', optionA: 'PC master race', optionB: 'Console vibes', emoji: '🎮' },
+    { question: 'PS5 or Xbox?', optionA: 'PlayStation', optionB: 'Xbox', emoji: '🎮' },
+    { question: 'Nintendo Switch 2: day one buy?', optionA: 'Day one', optionB: 'Wait', emoji: '🎮' },
+  ],
+  cinema: [
+    { question: 'Marvel done or coming back?', optionA: 'Comeback arc', optionB: 'Fatigue is real', emoji: '🎬' },
+    { question: 'Netflix or Disney+?', optionA: 'Netflix', optionB: 'Disney+', emoji: '📺' },
+    { question: 'Anime mainstream now?', optionA: 'Fully mainstream', optionB: 'Still niche', emoji: '🎌' },
+  ],
+  drama: [
+    { question: 'Elon Musk: genius or villain?', optionA: 'Genius', optionB: 'Villain arc', emoji: '👀' },
+    { question: 'AI taking your job in 5 years?', optionA: 'Probably', optionB: 'Humans irreplaceable', emoji: '🤖' },
+    { question: 'TikTok: creative or brain rot?', optionA: 'Creative', optionB: 'Brain rot', emoji: '📱' },
+  ],
+  debate: [
+    { question: 'Morning person or night owl?', optionA: 'Early bird', optionB: 'Night owl', emoji: '🌅' },
+    { question: 'Cats or dogs?', optionA: 'Dogs forever', optionB: 'Cats superior', emoji: '🐾' },
+    { question: 'Android or iPhone?', optionA: 'Android', optionB: 'iPhone', emoji: '📱' },
+    { question: 'Pineapple on pizza?', optionA: 'Delicious', optionB: 'Crime', emoji: '🍕' },
+  ]
+};
 
 function generateOpinionPredictions(category, count) {
   const pool = OPINION_POOLS[category];
   if (!pool || pool.length === 0) return [];
 
-  const durations = [DURATION.FLASH, DURATION.SHORT, DURATION.MEDIUM];
   return pickRandom(pool, count).map(p => ({
     ...p,
     category,
-    expiresAt: expires(durations[Math.floor(Math.random() * durations.length)])
+    expiresAt: expiresInHours(12),
+    metadata: { type: 'opinion' }
   }));
 }
 
@@ -612,9 +719,21 @@ function generateOpinionPredictions(category, count) {
 // ============================================
 
 async function addIfNotDupe(pred, activeList) {
+  // Check for duplicate by comparing question fragments
   const isDupe = activeList.some(e =>
     e.question.toLowerCase().includes(pred.question.toLowerCase().slice(0, 30))
   );
+  // Also check by fixture/game ID to avoid duplicates of same match
+  if (!isDupe && pred.metadata) {
+    const matchId = pred.metadata.fixtureId || pred.metadata.gameId || pred.metadata.fightId || pred.metadata.raceId;
+    if (matchId) {
+      const hasMatchDupe = activeList.some(e => {
+        const eId = e.metadata?.fixtureId || e.metadata?.gameId || e.metadata?.fightId || e.metadata?.raceId;
+        return eId && eId === matchId && e.metadata?.predType === pred.metadata?.predType;
+      });
+      if (hasMatchDupe) return false;
+    }
+  }
   if (!isDupe) {
     await db.addPrediction(pred);
     return true;
@@ -642,6 +761,12 @@ async function smartGenerate() {
   console.log(`Sports rotation: [${sportsToFetch.join(', ')}]`);
 
   for (const sport of sportsToFetch) {
+    // Skip if we already have enough predictions for this sport
+    if ((counts[sport] || 0) >= MIN_SLOTS[sport] * 2) {
+      console.log(`  ${sport}: already ${counts[sport]} active, skipping API call`);
+      continue;
+    }
+
     const generator = SPORT_GENERATORS[sport];
     if (!generator) continue;
     try {
@@ -649,11 +774,13 @@ async function smartGenerate() {
       for (const pred of preds) {
         if (await addIfNotDupe(pred, active)) {
           totalGenerated++;
-          active.push(pred); // Track to avoid self-dupes
+          active.push(pred);
         }
       }
       if (preds.length > 0) {
-        console.log(`  ${sport}: +${preds.length} live`);
+        console.log(`  ${sport}: +${preds.length} live (7-day lookahead)`);
+      } else {
+        console.log(`  ${sport}: 0 upcoming events found`);
       }
     } catch (e) {
       console.error(`  ${sport} error:`, e.message);
@@ -696,15 +823,15 @@ async function smartGenerate() {
     }
   }
 
-  // === STEP 4: Fill remaining gaps with opinion backup ===
-  // Recount after API additions
+  // === STEP 4: Fill remaining gaps with opinion backup (NON-SPORT only) ===
   const updatedCounts = {};
   for (const cat of Object.keys(MIN_SLOTS)) {
     updatedCounts[cat] = active.filter(p => p.category === cat).length;
   }
 
-  for (const [cat, minRequired] of Object.entries(MIN_SLOTS)) {
-    const deficit = minRequired - (updatedCounts[cat] || 0);
+  const opinionCategories = ['musique', 'gaming', 'cinema', 'drama', 'debate'];
+  for (const cat of opinionCategories) {
+    const deficit = (MIN_SLOTS[cat] || 0) - (updatedCounts[cat] || 0);
     if (deficit <= 0) continue;
 
     const opinions = generateOpinionPredictions(cat, deficit);
@@ -735,7 +862,7 @@ async function cleanupExpired() {
 }
 
 async function startScheduler() {
-  console.log('Prediction scheduler started (3h cycle, smart rotation)');
+  console.log('Prediction scheduler started (3h cycle, 7-day lookahead)');
 
   // Generate on startup
   const active = await db.getActivePredictions();
@@ -763,19 +890,6 @@ async function startScheduler() {
 // Backward compatibility
 async function generateDailyPredictions() {
   return smartGenerate();
-}
-
-// ============================================
-// UTILS
-// ============================================
-
-function pickRandom(arr, count) {
-  const shuffled = [...arr].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count);
-}
-
-function expires(hours) {
-  return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
 }
 
 module.exports = { generateDailyPredictions, cleanupExpired, startScheduler };

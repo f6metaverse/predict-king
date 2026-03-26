@@ -332,6 +332,14 @@ app.post('/api/comments', async (req, res) => {
 
 // --- Auto-generate predictions on startup ---
 async function initPredictions() {
+  // Auto-migrate: add metadata column if missing
+  try {
+    await db.pool.query(`ALTER TABLE predictions ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'`);
+    console.log('DB migration: metadata column OK');
+  } catch (e) {
+    console.log('DB migration note:', e.message);
+  }
+
   const existing = await db.getActivePredictions();
   if (existing.length < 5) {
     console.log('Generating initial predictions...');
