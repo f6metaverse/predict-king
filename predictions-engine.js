@@ -132,7 +132,7 @@ const NEWS_ROTATION = [
     { category: 'entertainment', q: 'movie%20OR%20Netflix%20OR%20Disney%20OR%20Marvel%20OR%20series%20OR%20HBO%20OR%20anime', predCat: 'cinema', emoji: '🎬', formats: 'entertainment' },
     { category: 'science', q: null, predCat: 'science', emoji: '🔬', formats: 'science' },
     { endpoint: 'crypto', coin: 'ada,avax,pepe,bnb,matic', predCat: 'crypto', emoji: '📰', formats: 'crypto' },
-    { category: 'sports', q: 'transfer%20OR%20injury%20OR%20record%20OR%20retire%20OR%20coach%20OR%20deal', predCat: 'sports_news', emoji: '📰', formats: 'sports' },
+    { category: 'sports', q: 'transfer%20OR%20injury%20OR%20record%20OR%20retire%20OR%20coach%20OR%20deal%20OR%20F1%20OR%20MotoGP', predCat: 'sports_news', emoji: '📰', formats: 'sports' },
   ],
   // Cycle 3: Drama/Tech + Health + Lifestyle + Trending
   [
@@ -167,7 +167,7 @@ const NEWS_ROTATION = [
     { category: 'health', q: 'fitness%20OR%20mental%20health%20OR%20diet%20OR%20wellness%20OR%20vaccine', predCat: 'health', emoji: '💪', formats: 'health' },
     { category: 'top', q: null, predCat: 'trending', emoji: '🔥', formats: 'general', sentiment: 'positive' },
     { endpoint: 'crypto', coin: 'btc,eth,doge,xrp', predCat: 'crypto', emoji: '₿', formats: 'crypto' },
-    { category: 'sports', q: 'champion%20OR%20final%20OR%20trade%20OR%20scandal%20OR%20doping', predCat: 'sports_news', emoji: '📰', formats: 'sports' },
+    { category: 'sports', q: 'Formula%201%20OR%20MotoGP%20OR%20Grand%20Prix%20OR%20NASCAR%20OR%20champion%20OR%20doping', predCat: 'sports_news', emoji: '🏁', formats: 'sports' },
   ],
   // Cycle 8: Environment + Lifestyle + Business + Tourism
   [
@@ -192,7 +192,7 @@ const NEWS_ROTATION = [
   ],
   // Cycle 11: MORE EVENTS — sports transfers, business moves, world events
   [
-    { category: 'sports', q: 'trade%20OR%20transfer%20OR%20draft%20OR%20playoffs%20OR%20final', predCat: 'sports_news', emoji: '📰', formats: 'sports' },
+    { category: 'sports', q: 'race%20OR%20podium%20OR%20qualifying%20OR%20lap%20record%20OR%20transfer%20OR%20playoffs', predCat: 'sports_news', emoji: '📰', formats: 'sports' },
     { category: 'business', q: 'IPO%20OR%20merger%20OR%20acquisition%20OR%20earnings%20OR%20launch', predCat: 'business', emoji: '💼', formats: 'business' },
     { category: 'world', q: 'summit%20OR%20treaty%20OR%20sanctions%20OR%20crisis%20OR%20agreement', predCat: 'world', emoji: '🌍', formats: 'general', prioritydomain: 'top' },
     { endpoint: 'crypto', coin: 'btc,eth,sol,doge', predCat: 'crypto', emoji: '₿', formats: 'crypto' },
@@ -616,12 +616,13 @@ async function generateF1Live() {
 
         // Dynamic F1 predictions — no hardcoded driver names
         const f1Templates = [
-          { question: `🏎 F1 ${name}: Who takes pole? (${dateStr})`, optionA: 'Red Bull', optionB: 'McLaren', predType: 'pole' },
+          { question: `🏎 F1 ${name}: Will the polesitter win the race? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'pole_wins' },
           { question: `🏎 F1 ${name}: Safety Car during the race? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'safety_car' },
-          { question: `🏎 F1 ${name}: Will the polesitter win? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'pole_wins' },
-          { question: `🏎 F1 ${name}: Top 3 finish for Ferrari? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'ferrari_podium' },
-          { question: `🏎 F1 ${name}: Red Bull vs McLaren — Who wins? (${dateStr})`, optionA: 'Red Bull', optionB: 'McLaren', predType: 'team_battle' },
-          { question: `🏎 F1 ${name}: Any DNF in top 5? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'dnf' },
+          { question: `🏎 F1 ${name}: Any DNF in the top 5? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'dnf' },
+          { question: `🏎 F1 ${name}: Over 5 overtakes for the lead? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'overtakes' },
+          { question: `🏎 F1 ${name}: Podium finish for the home team? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'home_podium' },
+          { question: `🏎 F1 ${name}: Rain during the race? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'rain' },
+          { question: `🏎 F1 ${name}: Fastest lap by the winner? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'fastest_lap' },
           { question: `🏎 F1 ${name}: Over 1 pit stop for the winner? (${dateStr})`, optionA: 'Multi-stop', optionB: '1-stop', predType: 'pit_strategy' },
         ];
 
