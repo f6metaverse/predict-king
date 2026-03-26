@@ -465,11 +465,22 @@ async function initPredictions() {
     console.log('DB migration note:', e.message);
   }
 
-  const existing = await db.getActivePredictions();
-  if (existing.length < 5) {
-    console.log('Generating initial predictions...');
-    await generateDailyPredictions();
+  // Clean up old static predictions (no metadata = old engine)
+  try {
+    const result = await db.pool.query(
+      `DELETE FROM predictions WHERE resolved = FALSE AND (metadata IS NULL OR metadata = '{}' OR metadata = 'null')`
+    );
+    if (result.rowCount > 0) {
+      console.log(`Cleanup: removed ${result.rowCount} old static predictions`);
+    }
+  } catch (e) {
+    console.log('Cleanup note:', e.message);
   }
+
+  // Force a full generation on startup
+  console.log('Startup: generating fresh predictions...');
+  await generateDailyPredictions();
+
   startScheduler();
   startResolveScheduler();
   startBroadcastScheduler();
