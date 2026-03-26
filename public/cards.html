@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Predict King — Hot Cards</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0f;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #fff;
+      padding: 20px;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .header h1 {
+      font-size: 24px;
+      color: #a855f7;
+    }
+    .header p {
+      color: #888;
+      font-size: 14px;
+      margin-top: 5px;
+    }
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+      gap: 24px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    /* === THE CARD — optimized for X/Twitter screenshots === */
+    .prediction-card {
+      background: linear-gradient(145deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      border-radius: 20px;
+      padding: 32px;
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      position: relative;
+      overflow: hidden;
+      min-height: 280px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .prediction-card::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(168, 85, 247, 0.08) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .card-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(168, 85, 247, 0.2);
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #c084fc;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      width: fit-content;
+      margin-bottom: 16px;
+    }
+    .card-badge.hot {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #f87171;
+    }
+
+    .card-question {
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.3;
+      margin-bottom: 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .card-options {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .card-option {
+      flex: 1;
+      padding: 14px;
+      border-radius: 12px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    .card-option.option-a {
+      background: rgba(168, 85, 247, 0.15);
+      border: 2px solid rgba(168, 85, 247, 0.5);
+      color: #c084fc;
+    }
+    .card-option.option-b {
+      background: rgba(59, 130, 246, 0.15);
+      border: 2px solid rgba(59, 130, 246, 0.5);
+      color: #60a5fa;
+    }
+    .option-percent {
+      font-size: 28px;
+      font-weight: 800;
+      display: block;
+      margin-bottom: 2px;
+    }
+    .option-label {
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0.8;
+    }
+
+    .card-bar {
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.1);
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    .card-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, #a855f7, #3b82f6);
+      transition: width 0.3s;
+    }
+
+    .card-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: relative;
+      z-index: 1;
+    }
+    .card-votes {
+      font-size: 13px;
+      color: #888;
+    }
+    .card-votes strong {
+      color: #fff;
+      font-size: 16px;
+    }
+    .card-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      color: #a855f7;
+    }
+    .card-brand img {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+    }
+    .card-cta {
+      font-size: 11px;
+      color: #666;
+      text-align: center;
+      margin-top: 8px;
+      letter-spacing: 0.5px;
+    }
+
+    .card-expiry {
+      font-size: 12px;
+      color: #f59e0b;
+      margin-top: 4px;
+    }
+
+    /* Single card mode for clean screenshots */
+    .single-card {
+      max-width: 480px;
+      margin: 40px auto;
+    }
+    .single-card .prediction-card {
+      min-height: 320px;
+      padding: 36px;
+    }
+    .single-card .card-question {
+      font-size: 26px;
+    }
+
+    .mode-toggle {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .mode-toggle button {
+      background: rgba(168, 85, 247, 0.2);
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      color: #c084fc;
+      padding: 8px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      margin: 0 5px;
+    }
+    .mode-toggle button.active {
+      background: #a855f7;
+      color: #fff;
+    }
+    .loading { text-align: center; color: #888; padding: 60px; font-size: 18px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>PREDICT KING — Hot Cards for X/Twitter</h1>
+    <p>Screenshot these cards and post them on X. Click a card for single-card view.</p>
+  </div>
+  <div class="mode-toggle">
+    <button class="active" onclick="loadCards('hot')">Hottest</button>
+    <button onclick="loadCards('latest')">Latest</button>
+    <button onclick="loadCards('sport')">Sport</button>
+    <button onclick="loadCards('crypto')">Crypto</button>
+    <button onclick="loadCards('news')">News</button>
+  </div>
+  <div id="container" class="cards-grid">
+    <div class="loading">Loading predictions...</div>
+  </div>
+
+  <script>
+    const catLabels = {
+      football: '⚽ FOOTBALL', nba: '🏀 NBA', combat: '🥊 COMBAT', f1: '🏎️ F1',
+      nfl: '🏈 NFL', hockey: '🏒 NHL', rugby: '🏉 RUGBY', crypto: '₿ CRYPTO',
+      musique: '🎵 MUSIC', gaming: '🎮 GAMING', cinema: '🎬 MOVIES', drama: '👀 DRAMA',
+      politics: '🏛️ POLITICS', world: '🌍 WORLD', science: '🔬 SCIENCE', health: '💪 HEALTH',
+      trending: '🔥 TRENDING', crime: '🚨 CRIME', environment: '🌱 PLANET',
+      business: '💼 BUSINESS', sports_news: '📰 SPORT NEWS', motorsport: '🏁 MOTORSPORT',
+      tennis: '🎾 TENNIS', golf: '⛳ GOLF', combat_news: '🥊 BOXING/UFC',
+      wrestling: '💪 WRESTLING', cycling: '🚴 CYCLING', athletics: '🏃 ATHLETICS',
+      esports: '🕹 ESPORTS', lifestyle: '✨ LIFESTYLE', food: '🍔 FOOD',
+      education: '🎓 EDUCATION', tourism: '✈️ TOURISM'
+    };
+
+    const sportCats = ['football','nba','combat','f1','nfl','hockey','rugby','motorsport','tennis','golf','combat_news','wrestling','cycling','athletics','esports','sports_news'];
+    const newsCats = ['musique','gaming','cinema','drama','politics','world','science','health','trending','crime','environment','business','lifestyle','food','education','tourism'];
+
+    function getTimeLeft(expiresAt) {
+      const diff = new Date(expiresAt) - new Date();
+      if (diff <= 0) return 'Expired';
+      const hours = Math.floor(diff / 3600000);
+      const mins = Math.floor((diff % 3600000) / 60000);
+      if (hours > 24) return Math.floor(hours / 24) + 'd ' + (hours % 24) + 'h left';
+      if (hours > 0) return hours + 'h ' + mins + 'm left';
+      return mins + 'm left';
+    }
+
+    function renderCard(p, single = false) {
+      const total = p.votesA + p.votesB;
+      const pctA = total > 0 ? Math.round((p.votesA / total) * 100) : 50;
+      const pctB = total > 0 ? Math.round((p.votesB / total) * 100) : 50;
+      const isHot = total >= 5;
+      const label = catLabels[p.category] || p.category.toUpperCase();
+      const timeLeft = getTimeLeft(p.expiresAt);
+
+      return `
+        <div class="prediction-card" onclick="showSingle('${p.id}')">
+          <div>
+            <span class="card-badge ${isHot ? 'hot' : ''}">${isHot ? '🔥 HOT — ' : ''}${label}</span>
+            <div class="card-question">${p.question}</div>
+          </div>
+          <div>
+            <div class="card-options">
+              <div class="card-option option-a">
+                <span class="option-percent">${pctA}%</span>
+                <span class="option-label">${p.optionA}</span>
+              </div>
+              <div class="card-option option-b">
+                <span class="option-percent">${pctB}%</span>
+                <span class="option-label">${p.optionB}</span>
+              </div>
+            </div>
+            <div class="card-bar"><div class="card-bar-fill" style="width:${pctA}%"></div></div>
+            <div class="card-footer">
+              <div class="card-votes"><strong>${total}</strong> votes${timeLeft !== 'Expired' ? ' — <span class="card-expiry">' + timeLeft + '</span>' : ''}</div>
+              <div class="card-brand">👑 PREDICT KING</div>
+            </div>
+            <div class="card-cta">@PredictKingApp — Play on Telegram</div>
+          </div>
+        </div>
+      `;
+    }
+
+    let allPredictions = [];
+
+    async function loadCards(mode) {
+      // Update active button
+      document.querySelectorAll('.mode-toggle button').forEach(b => b.classList.remove('active'));
+      event?.target?.classList?.add('active');
+
+      const container = document.getElementById('container');
+      container.innerHTML = '<div class="loading">Loading...</div>';
+
+      try {
+        const res = await fetch('/api/predictions');
+        allPredictions = await res.json();
+
+        let filtered;
+        switch (mode) {
+          case 'hot':
+            filtered = [...allPredictions].sort((a, b) => (b.votesA + b.votesB) - (a.votesA + a.votesB)).slice(0, 12);
+            break;
+          case 'latest':
+            filtered = allPredictions.slice(0, 12);
+            break;
+          case 'sport':
+            filtered = allPredictions.filter(p => sportCats.includes(p.category)).slice(0, 12);
+            break;
+          case 'crypto':
+            filtered = allPredictions.filter(p => p.category === 'crypto').slice(0, 12);
+            break;
+          case 'news':
+            filtered = allPredictions.filter(p => newsCats.includes(p.category)).slice(0, 12);
+            break;
+          default:
+            filtered = allPredictions.slice(0, 12);
+        }
+
+        container.className = 'cards-grid';
+        container.innerHTML = filtered.length > 0
+          ? filtered.map(p => renderCard(p)).join('')
+          : '<div class="loading">No predictions found for this filter</div>';
+      } catch (e) {
+        container.innerHTML = '<div class="loading">Error loading predictions</div>';
+      }
+    }
+
+    function showSingle(id) {
+      const p = allPredictions.find(x => x.id === id);
+      if (!p) return;
+      const container = document.getElementById('container');
+      container.className = 'single-card';
+      container.innerHTML = renderCard(p, true) +
+        '<div style="text-align:center;margin-top:20px"><button onclick="loadCards(\'hot\')" style="background:rgba(168,85,247,0.2);border:1px solid rgba(168,85,247,0.4);color:#c084fc;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:14px">← Back to all cards</button></div>';
+    }
+
+    // Load on start
+    loadCards('hot');
+  </script>
+</body>
+</html>
