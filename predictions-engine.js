@@ -58,6 +58,7 @@ function expiresInHours(hours) {
 
 // Min active predictions per category
 const MIN_SLOTS = {
+  // Sport (API-Sports)
   crypto: 3,
   football: 3,
   nba: 2,
@@ -66,15 +67,25 @@ const MIN_SLOTS = {
   nfl: 1,
   hockey: 2,
   rugby: 1,
+  // News-powered (NewsData.io)
   musique: 2,
   gaming: 2,
   cinema: 2,
   drama: 2,
   politics: 2,
-  world: 1,
+  world: 2,
   science: 1,
   health: 1,
-  trending: 1,
+  trending: 2,
+  crime: 1,
+  environment: 1,
+  business: 1,
+  sports_news: 1,
+  lifestyle: 1,
+  food: 1,
+  education: 1,
+  tourism: 1,
+  // Opinion backup
   debate: 2
 };
 
@@ -95,62 +106,168 @@ const API_SPORTS_ROTATION = [
   ['hockey', 'rugby', 'combat'],
 ];
 
-// News rotation
+// ============================================
+// NEWS ROTATION — uses ALL 17 NewsData categories
+// + dedicated /crypto endpoint
+// + sentiment, removeduplicate, prioritydomain
+// 200 credits/day = we use ~80-100, plenty of room
+// ============================================
 let newsCycleIndex = 0;
 
 const NEWS_ROTATION = [
+  // Cycle 0: Crypto dedicated + Music + Breaking
   [
-    { category: 'business', q: 'crypto%20OR%20bitcoin%20OR%20ethereum', predCat: 'crypto', emoji: '📰' },
-    { category: 'entertainment', q: 'music%20OR%20album%20OR%20rapper%20OR%20singer%20OR%20spotify', predCat: 'musique', emoji: '🎵' },
-    { category: 'top', q: null, predCat: 'trending', emoji: '🔥' },
+    { endpoint: 'crypto', coin: 'btc,eth,sol,doge,xrp', predCat: 'crypto', emoji: '₿', formats: 'crypto' },
+    { category: 'entertainment', q: 'music%20OR%20album%20OR%20rapper%20OR%20singer%20OR%20spotify%20OR%20concert', predCat: 'musique', emoji: '🎵', formats: 'entertainment' },
+    { category: 'top', q: null, predCat: 'trending', emoji: '🔥', formats: 'general', prioritydomain: 'top' },
+    { category: 'crime', q: null, predCat: 'crime', emoji: '🚨', formats: 'crime' },
   ],
+  // Cycle 1: Gaming + Politics + World + Environment
   [
-    { category: 'technology', q: 'gaming%20OR%20playstation%20OR%20xbox%20OR%20GTA%20OR%20fortnite%20OR%20nintendo', predCat: 'gaming', emoji: '🎮' },
-    { category: 'politics', q: null, predCat: 'politics', emoji: '🏛' },
-    { category: 'world', q: null, predCat: 'world', emoji: '🌍' },
+    { category: 'technology', q: 'gaming%20OR%20playstation%20OR%20xbox%20OR%20GTA%20OR%20fortnite%20OR%20nintendo%20OR%20Steam', predCat: 'gaming', emoji: '🎮', formats: 'entertainment' },
+    { category: 'politics', q: null, predCat: 'politics', emoji: '🏛', formats: 'politics' },
+    { category: 'world', q: null, predCat: 'world', emoji: '🌍', formats: 'general', prioritydomain: 'top' },
+    { category: 'environment', q: null, predCat: 'environment', emoji: '🌱', formats: 'environment' },
   ],
+  // Cycle 2: Cinema + Science + Crypto + Sports news
   [
-    { category: 'entertainment', q: 'movie%20OR%20Netflix%20OR%20Disney%20OR%20Marvel%20OR%20series%20OR%20streaming', predCat: 'cinema', emoji: '🎬' },
-    { category: 'science', q: null, predCat: 'science', emoji: '🔬' },
-    { category: 'business', q: 'crypto%20OR%20bitcoin%20OR%20ethereum%20OR%20blockchain', predCat: 'crypto', emoji: '📰' },
+    { category: 'entertainment', q: 'movie%20OR%20Netflix%20OR%20Disney%20OR%20Marvel%20OR%20series%20OR%20HBO%20OR%20anime', predCat: 'cinema', emoji: '🎬', formats: 'entertainment' },
+    { category: 'science', q: null, predCat: 'science', emoji: '🔬', formats: 'science' },
+    { endpoint: 'crypto', coin: 'ada,avax,pepe,bnb,matic', predCat: 'crypto', emoji: '📰', formats: 'crypto' },
+    { category: 'sports', q: 'transfer%20OR%20injury%20OR%20record%20OR%20retire%20OR%20coach%20OR%20deal', predCat: 'sports_news', emoji: '📰', formats: 'sports' },
   ],
+  // Cycle 3: Drama/Tech + Health + Lifestyle + Trending
   [
-    { category: 'technology', q: 'AI%20OR%20Elon%20Musk%20OR%20Apple%20OR%20TikTok%20OR%20viral%20OR%20influencer', predCat: 'drama', emoji: '👀' },
-    { category: 'health', q: null, predCat: 'health', emoji: '💪' },
-    { category: 'entertainment', q: 'celebrity%20OR%20award%20OR%20viral%20OR%20trending', predCat: 'trending', emoji: '🔥' },
+    { category: 'technology', q: 'AI%20OR%20Elon%20Musk%20OR%20Apple%20OR%20TikTok%20OR%20viral%20OR%20Meta%20OR%20OpenAI', predCat: 'drama', emoji: '👀', formats: 'tech' },
+    { category: 'health', q: null, predCat: 'health', emoji: '💪', formats: 'health' },
+    { category: 'lifestyle', q: null, predCat: 'lifestyle', emoji: '✨', formats: 'lifestyle' },
+    { category: 'entertainment', q: 'celebrity%20OR%20award%20OR%20viral%20OR%20trending%20OR%20scandal', predCat: 'trending', emoji: '🔥', formats: 'general' },
   ],
+  // Cycle 4: Crypto + Music + Business + Food
   [
-    { category: 'business', q: 'crypto%20OR%20bitcoin%20OR%20solana%20OR%20memecoin', predCat: 'crypto', emoji: '📰' },
-    { category: 'entertainment', q: 'concert%20OR%20Grammy%20OR%20rapper%20OR%20kpop%20OR%20album', predCat: 'musique', emoji: '🎵' },
-    { category: 'top', q: null, predCat: 'drama', emoji: '👀' },
+    { endpoint: 'crypto', coin: 'btc,eth,sol', predCat: 'crypto', emoji: '₿', formats: 'crypto' },
+    { category: 'entertainment', q: 'concert%20OR%20Grammy%20OR%20rapper%20OR%20kpop%20OR%20album%20OR%20tour', predCat: 'musique', emoji: '🎵', formats: 'entertainment' },
+    { category: 'business', q: 'startup%20OR%20IPO%20OR%20acquisition%20OR%20layoffs%20OR%20billion', predCat: 'business', emoji: '💼', formats: 'business' },
+    { category: 'food', q: null, predCat: 'food', emoji: '🍔', formats: 'lifestyle' },
   ],
+  // Cycle 5: Gaming + World + Politics + Education
   [
-    { category: 'technology', q: 'esports%20OR%20Steam%20OR%20gaming%20OR%20VR%20OR%20console', predCat: 'gaming', emoji: '🎮' },
-    { category: 'world', q: null, predCat: 'world', emoji: '🌍' },
-    { category: 'politics', q: null, predCat: 'politics', emoji: '🏛' },
+    { category: 'technology', q: 'esports%20OR%20Steam%20OR%20VR%20OR%20console%20OR%20Twitch%20OR%20streamer', predCat: 'gaming', emoji: '🎮', formats: 'entertainment' },
+    { category: 'world', q: null, predCat: 'world', emoji: '🌍', formats: 'general', prioritydomain: 'top' },
+    { category: 'politics', q: 'election%20OR%20president%20OR%20law%20OR%20vote%20OR%20senate', predCat: 'politics', emoji: '🏛', formats: 'politics' },
+    { category: 'education', q: null, predCat: 'education', emoji: '🎓', formats: 'general' },
   ],
+  // Cycle 6: Cinema + Drama + Science + Crime
   [
-    { category: 'entertainment', q: 'box%20office%20OR%20anime%20OR%20series%20OR%20Netflix%20OR%20HBO', predCat: 'cinema', emoji: '🎬' },
-    { category: 'technology', q: 'startup%20OR%20viral%20OR%20controversy%20OR%20scandal', predCat: 'drama', emoji: '👀' },
-    { category: 'science', q: 'space%20OR%20NASA%20OR%20discovery%20OR%20breakthrough', predCat: 'science', emoji: '🔬' },
+    { category: 'entertainment', q: 'box%20office%20OR%20anime%20OR%20series%20OR%20Oscar%20OR%20Emmy', predCat: 'cinema', emoji: '🎬', formats: 'entertainment' },
+    { category: 'technology', q: 'controversy%20OR%20scandal%20OR%20leaked%20OR%20hack%20OR%20ban', predCat: 'drama', emoji: '👀', formats: 'tech' },
+    { category: 'science', q: 'space%20OR%20NASA%20OR%20discovery%20OR%20Mars%20OR%20quantum', predCat: 'science', emoji: '🔬', formats: 'science' },
+    { category: 'crime', q: 'trial%20OR%20arrest%20OR%20fraud%20OR%20investigation', predCat: 'crime', emoji: '🚨', formats: 'crime' },
   ],
+  // Cycle 7: Health + Trending + Crypto + Sports news
   [
-    { category: 'health', q: 'fitness%20OR%20mental%20health%20OR%20diet%20OR%20wellness', predCat: 'health', emoji: '💪' },
-    { category: 'top', q: null, predCat: 'trending', emoji: '🔥' },
-    { category: 'business', q: 'bitcoin%20OR%20ethereum%20OR%20crypto%20OR%20DeFi', predCat: 'crypto', emoji: '📰' },
+    { category: 'health', q: 'fitness%20OR%20mental%20health%20OR%20diet%20OR%20wellness%20OR%20vaccine', predCat: 'health', emoji: '💪', formats: 'health' },
+    { category: 'top', q: null, predCat: 'trending', emoji: '🔥', formats: 'general', sentiment: 'positive' },
+    { endpoint: 'crypto', coin: 'btc,eth,doge,xrp', predCat: 'crypto', emoji: '₿', formats: 'crypto' },
+    { category: 'sports', q: 'champion%20OR%20final%20OR%20trade%20OR%20scandal%20OR%20doping', predCat: 'sports_news', emoji: '📰', formats: 'sports' },
+  ],
+  // Cycle 8: Environment + Lifestyle + Business + Tourism
+  [
+    { category: 'environment', q: 'climate%20OR%20pollution%20OR%20renewable%20OR%20wildfire%20OR%20flood', predCat: 'environment', emoji: '🌱', formats: 'environment' },
+    { category: 'lifestyle', q: 'trend%20OR%20viral%20OR%20fashion%20OR%20wellness', predCat: 'lifestyle', emoji: '✨', formats: 'lifestyle' },
+    { category: 'business', q: 'Tesla%20OR%20Amazon%20OR%20Google%20OR%20Microsoft%20OR%20Apple', predCat: 'business', emoji: '💼', formats: 'business' },
+    { category: 'tourism', q: null, predCat: 'tourism', emoji: '✈️', formats: 'lifestyle' },
+  ],
+  // Cycle 9: French news + Drama + Food + World sentiment
+  [
+    { category: 'top', q: null, predCat: 'trending', emoji: '🇫🇷', formats: 'general', language: 'fr', country: 'fr' },
+    { category: 'technology', q: 'AI%20OR%20robot%20OR%20ChatGPT%20OR%20autonomous%20OR%20deepfake', predCat: 'drama', emoji: '🤖', formats: 'tech' },
+    { category: 'food', q: 'restaurant%20OR%20chef%20OR%20recipe%20OR%20vegan%20OR%20fast%20food', predCat: 'food', emoji: '🍔', formats: 'lifestyle' },
+    { category: 'world', q: null, predCat: 'world', emoji: '🌍', formats: 'general', sentiment: 'negative' },
   ],
 ];
 
-// News question formats
-const NEWS_FORMATS = [
-  { suffix: ' — Will this matter in a week?', a: 'Big impact', b: 'Already forgotten' },
-  { suffix: ' — Agree or disagree?', a: 'Agree', b: 'Disagree' },
-  { suffix: ' — Good or bad news?', a: 'Good', b: 'Bad' },
-  { suffix: ' — Overhyped or underrated?', a: 'Overhyped', b: 'Underrated' },
-  { suffix: ' — W or L?', a: 'Massive W', b: 'Huge L' },
-  { suffix: ' — Hit or miss?', a: 'Hit', b: 'Miss' },
-  { suffix: ' — Real deal or just noise?', a: 'Real deal', b: 'Just noise' },
-];
+// Question formats per category context — way more variety
+const NEWS_FORMATS_BY_TYPE = {
+  general: [
+    { suffix: ' — Will this matter in a week?', a: 'Big impact', b: 'Already forgotten' },
+    { suffix: ' — Overhyped or underrated?', a: 'Overhyped', b: 'Underrated' },
+    { suffix: ' — W or L?', a: 'Massive W', b: 'Huge L' },
+    { suffix: ' — Real deal or just noise?', a: 'Real deal', b: 'Just noise' },
+    { suffix: ' — Will people still care tomorrow?', a: 'Yes, big deal', b: 'Nah, next' },
+    { suffix: ' — Hot take: good or bad for society?', a: 'Good', b: 'Bad' },
+  ],
+  crypto: [
+    { suffix: ' — Bullish or bearish signal?', a: 'Bullish', b: 'Bearish' },
+    { suffix: ' — Buy the rumor or sell the news?', a: 'Buy', b: 'Sell' },
+    { suffix: ' — Pump incoming or nothing burger?', a: 'Pump incoming', b: 'Nothing burger' },
+    { suffix: ' — Good for adoption?', a: 'Mass adoption', b: 'Nobody cares' },
+    { suffix: ' — Will this move the market?', a: 'Market mover', b: 'Price stays flat' },
+  ],
+  politics: [
+    { suffix: ' — Will this change anything?', a: 'Game changer', b: 'Business as usual' },
+    { suffix: ' — Public support or backlash?', a: 'Public supports it', b: 'Major backlash' },
+    { suffix: ' — Will this actually happen?', a: 'It\'s happening', b: 'Dead on arrival' },
+    { suffix: ' — Good move or political suicide?', a: 'Smart move', b: 'Political suicide' },
+    { suffix: ' — Will this pass into law?', a: 'YES', b: 'NO' },
+  ],
+  tech: [
+    { suffix: ' — Innovation or hype?', a: 'True innovation', b: 'Pure hype' },
+    { suffix: ' — Will this disrupt the industry?', a: 'Total disruption', b: 'Just noise' },
+    { suffix: ' — Progress or danger?', a: 'Progress', b: 'Dangerous' },
+    { suffix: ' — Users will love it or hate it?', a: 'Love it', b: 'Hate it' },
+    { suffix: ' — Is this the future?', a: 'The future is here', b: 'Not even close' },
+  ],
+  entertainment: [
+    { suffix: ' — Hit or flop?', a: 'Massive hit', b: 'Total flop' },
+    { suffix: ' — Will it break the internet?', a: 'Internet broken', b: 'Nobody cares' },
+    { suffix: ' — Career boost or career over?', a: 'Career boost', b: 'It\'s over' },
+    { suffix: ' — Iconic or forgettable?', a: 'Iconic', b: 'Forgettable' },
+    { suffix: ' — Fan reaction: love or hate?', a: 'Fans love it', b: 'Fans hate it' },
+  ],
+  science: [
+    { suffix: ' — Breakthrough or premature hype?', a: 'Real breakthrough', b: 'Premature hype' },
+    { suffix: ' — Will this change our lives?', a: 'Life-changing', b: 'Lab curiosity only' },
+    { suffix: ' — Nobel Prize worthy?', a: 'Nobel level', b: 'Not that big' },
+    { suffix: ' — Available to the public within 5 years?', a: 'YES', b: 'NO way' },
+  ],
+  health: [
+    { suffix: ' — Game changer for health?', a: 'Game changer', b: 'Overhyped' },
+    { suffix: ' — Should people worry?', a: 'Yes, be careful', b: 'No panic needed' },
+    { suffix: ' — Will this become mainstream?', a: 'Mainstream soon', b: 'Niche forever' },
+    { suffix: ' — Trust the science on this one?', a: 'Science is clear', b: 'Needs more research' },
+  ],
+  crime: [
+    { suffix: ' — Guilty or innocent?', a: 'Guilty', b: 'Innocent' },
+    { suffix: ' — Justice will be served?', a: 'Justice wins', b: 'They\'ll walk free' },
+    { suffix: ' — Will this case go viral?', a: 'Already viral', b: 'Under the radar' },
+    { suffix: ' — Bigger scandal behind this?', a: 'Tip of the iceberg', b: 'Isolated case' },
+  ],
+  environment: [
+    { suffix: ' — Will this actually help the planet?', a: 'Real impact', b: 'Greenwashing' },
+    { suffix: ' — Too late or still time?', a: 'Still time to act', b: 'Too late' },
+    { suffix: ' — Governments will act?', a: 'Action incoming', b: 'All talk no action' },
+    { suffix: ' — Will people change their habits?', a: 'People will adapt', b: 'Nothing changes' },
+  ],
+  business: [
+    { suffix: ' — Smart business move?', a: 'Genius move', b: 'Terrible idea' },
+    { suffix: ' — Stock going up or down after this?', a: 'Stock goes up', b: 'Stock tanks' },
+    { suffix: ' — Will competitors follow?', a: 'Everyone copies', b: 'Unique strategy' },
+    { suffix: ' — Good for employees or just shareholders?', a: 'Good for all', b: 'Shareholders only' },
+  ],
+  sports: [
+    { suffix: ' — Good deal or overpay?', a: 'Great deal', b: 'Overpaid' },
+    { suffix: ' — Will this impact the season?', a: 'Season changer', b: 'Minor move' },
+    { suffix: ' — Fans happy or furious?', a: 'Fans love it', b: 'Fans furious' },
+    { suffix: ' — Dynasty building or desperate move?', a: 'Dynasty mode', b: 'Desperate' },
+  ],
+  lifestyle: [
+    { suffix: ' — Trend or fad?', a: 'Here to stay', b: 'Gone in a month' },
+    { suffix: ' — Would you try it?', a: 'Sign me up', b: 'Hard pass' },
+    { suffix: ' — The future of living?', a: 'Absolutely', b: 'Nah' },
+    { suffix: ' — Overrated or underrated?', a: 'Overrated', b: 'Underrated gem' },
+  ],
+};
 
 // ============================================
 // API-SPORTS GENERATORS
@@ -628,7 +745,9 @@ async function generateCryptoLive() {
 }
 
 // ============================================
-// NEWS-BASED GENERATOR (NewsData.io)
+// NEWS-BASED GENERATOR v2 (NewsData.io)
+// Uses /latest + /crypto endpoints
+// Filters: removeduplicate, prioritydomain, sentiment, timeframe
 // ============================================
 
 async function generateFromNews(newsConfig) {
@@ -636,35 +755,75 @@ async function generateFromNews(newsConfig) {
   if (!NEWS_API_KEY) return predictions;
 
   try {
-    let url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=${newsConfig.category}`;
-    if (newsConfig.q) url += `&q=${newsConfig.q}`;
+    let url;
+
+    if (newsConfig.endpoint === 'crypto') {
+      // Dedicated crypto endpoint — way better for crypto news
+      url = `https://newsdata.io/api/1/crypto?apikey=${NEWS_API_KEY}&language=en&removeduplicate=1`;
+      if (newsConfig.coin) url += `&coin=${newsConfig.coin}`;
+    } else {
+      // Standard latest endpoint
+      const lang = newsConfig.language || 'en';
+      url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=${lang}&category=${newsConfig.category}&removeduplicate=1&timeframe=24`;
+      if (newsConfig.q) url += `&q=${newsConfig.q}`;
+      if (newsConfig.prioritydomain) url += `&prioritydomain=${newsConfig.prioritydomain}`;
+      if (newsConfig.sentiment) url += `&sentiment=${newsConfig.sentiment}`;
+      if (newsConfig.country) url += `&country=${newsConfig.country}`;
+    }
 
     const res = await fetch(url);
     const data = await res.json();
 
-    if (data.results) {
-      for (const article of data.results.slice(0, 4)) {
-        if (!article.title || article.title.length < 15) continue;
-        const title = article.title.slice(0, 75);
+    if (!data.results || data.results.length === 0) return predictions;
 
-        const fmt = NEWS_FORMATS[Math.floor(Math.random() * NEWS_FORMATS.length)];
-        const finalFmt = newsConfig.predCat === 'crypto'
-          ? { suffix: ' — Bullish or bearish?', a: 'Bullish', b: 'Bearish' }
-          : fmt;
+    // Get format pool for this category
+    const formatType = newsConfig.formats || 'general';
+    const formatPool = NEWS_FORMATS_BY_TYPE[formatType] || NEWS_FORMATS_BY_TYPE.general;
 
-        predictions.push({
-          question: `"${title}"${finalFmt.suffix}`,
-          optionA: finalFmt.a, optionB: finalFmt.b,
-          category: newsConfig.predCat, emoji: newsConfig.emoji,
-          expiresAt: expiresInHours(12),
-          metadata: { source: 'newsdata', type: 'opinion' }
-        });
+    // Process more articles (up to 8), create more predictions
+    for (const article of data.results.slice(0, 8)) {
+      if (!article.title || article.title.length < 15) continue;
+
+      const title = article.title.slice(0, 80);
+      const fmt = formatPool[Math.floor(Math.random() * formatPool.length)];
+
+      // Use article sentiment if available to pick better format
+      let finalFmt = fmt;
+      if (article.sentiment === 'positive' && formatType !== 'crypto') {
+        const positiveFmts = [
+          { suffix: ' — Will this positive trend continue?', a: 'Just the beginning', b: 'Peak reached' },
+          { suffix: ' — Celebrate or stay cautious?', a: 'Celebrate!', b: 'Stay cautious' },
+          ...formatPool
+        ];
+        finalFmt = positiveFmts[Math.floor(Math.random() * positiveFmts.length)];
+      } else if (article.sentiment === 'negative' && formatType !== 'crypto') {
+        const negativeFmts = [
+          { suffix: ' — Will this get worse?', a: 'It gets worse', b: 'Worst is over' },
+          { suffix: ' — Recovery coming?', a: 'Bounce back soon', b: 'Long road ahead' },
+          ...formatPool
+        ];
+        finalFmt = negativeFmts[Math.floor(Math.random() * negativeFmts.length)];
       }
+
+      predictions.push({
+        question: `"${title}"${finalFmt.suffix}`,
+        optionA: finalFmt.a, optionB: finalFmt.b,
+        category: newsConfig.predCat, emoji: newsConfig.emoji,
+        expiresAt: expiresInHours(12),
+        metadata: {
+          source: 'newsdata',
+          type: 'opinion',
+          articleId: article.article_id,
+          sentiment: article.sentiment || null,
+          sourceUrl: article.link || null
+        }
+      });
     }
   } catch (e) {
-    console.error(`News API error (${newsConfig.category}):`, e.message);
+    console.error(`News API error (${newsConfig.predCat}):`, e.message);
   }
-  return pickRandom(predictions, 2);
+  // Return more predictions per call — 3 instead of 2
+  return pickRandom(predictions, 3);
 }
 
 // ============================================
