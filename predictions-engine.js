@@ -80,7 +80,15 @@ const MIN_SLOTS = {
   crime: 1,
   environment: 1,
   business: 1,
-  sports_news: 1,
+  sports_news: 2,
+  motorsport: 1,
+  tennis: 1,
+  golf: 1,
+  combat_news: 1,
+  cycling: 1,
+  wrestling: 1,
+  athletics: 1,
+  esports: 1,
   lifestyle: 1,
   food: 1,
   education: 1,
@@ -132,7 +140,7 @@ const NEWS_ROTATION = [
     { category: 'entertainment', q: 'movie%20OR%20Netflix%20OR%20Disney%20OR%20Marvel%20OR%20series%20OR%20HBO%20OR%20anime', predCat: 'cinema', emoji: '🎬', formats: 'entertainment' },
     { category: 'science', q: null, predCat: 'science', emoji: '🔬', formats: 'science' },
     { endpoint: 'crypto', coin: 'ada,avax,pepe,bnb,matic', predCat: 'crypto', emoji: '📰', formats: 'crypto' },
-    { category: 'sports', q: 'transfer%20OR%20injury%20OR%20record%20OR%20retire%20OR%20coach%20OR%20deal%20OR%20F1%20OR%20MotoGP', predCat: 'sports_news', emoji: '📰', formats: 'sports' },
+    { category: 'sports', q: 'transfer%20OR%20injury%20OR%20record%20OR%20retire%20OR%20manager%20sacked%20OR%20VAR', predCat: 'sports_news', emoji: '⚽', formats: 'sports' },
   ],
   // Cycle 3: Drama/Tech + Health + Lifestyle + Trending
   [
@@ -167,7 +175,7 @@ const NEWS_ROTATION = [
     { category: 'health', q: 'fitness%20OR%20mental%20health%20OR%20diet%20OR%20wellness%20OR%20vaccine', predCat: 'health', emoji: '💪', formats: 'health' },
     { category: 'top', q: null, predCat: 'trending', emoji: '🔥', formats: 'general', sentiment: 'positive' },
     { endpoint: 'crypto', coin: 'btc,eth,doge,xrp', predCat: 'crypto', emoji: '₿', formats: 'crypto' },
-    { category: 'sports', q: 'Formula%201%20OR%20MotoGP%20OR%20Grand%20Prix%20OR%20NASCAR%20OR%20champion%20OR%20doping', predCat: 'sports_news', emoji: '🏁', formats: 'sports' },
+    { category: 'sports', q: 'Formula%201%20OR%20MotoGP%20OR%20Grand%20Prix%20OR%20NASCAR%20OR%20IndyCar', predCat: 'motorsport', emoji: '🏁', formats: 'motorsport' },
   ],
   // Cycle 8: Environment + Lifestyle + Business + Tourism
   [
@@ -190,12 +198,33 @@ const NEWS_ROTATION = [
     { category: 'politics', q: 'summit%20OR%20debate%20OR%20election%20OR%20hearing%20OR%20vote', predCat: 'politics', emoji: '🏛', formats: 'politics' },
     { category: 'technology', q: 'launch%20OR%20keynote%20OR%20announcement%20OR%20reveal%20OR%20event', predCat: 'drama', emoji: '🚀', formats: 'tech' },
   ],
-  // Cycle 11: MORE EVENTS — sports transfers, business moves, world events
+  // Cycle 11: TENNIS + GOLF + COMBAT + BUSINESS
   [
-    { category: 'sports', q: 'race%20OR%20podium%20OR%20qualifying%20OR%20lap%20record%20OR%20transfer%20OR%20playoffs', predCat: 'sports_news', emoji: '📰', formats: 'sports' },
+    { category: 'sports', q: 'tennis%20OR%20Wimbledon%20OR%20Roland%20Garros%20OR%20US%20Open%20OR%20ATP%20OR%20WTA%20OR%20Grand%20Slam', predCat: 'tennis', emoji: '🎾', formats: 'tennis' },
+    { category: 'sports', q: 'golf%20OR%20Masters%20OR%20PGA%20OR%20Ryder%20Cup%20OR%20Open%20Championship', predCat: 'golf', emoji: '⛳', formats: 'sports' },
+    { category: 'sports', q: 'boxing%20OR%20UFC%20OR%20Canelo%20OR%20title%20fight%20OR%20knockout%20OR%20weigh-in', predCat: 'combat_news', emoji: '🥊', formats: 'combat_news' },
     { category: 'business', q: 'IPO%20OR%20merger%20OR%20acquisition%20OR%20earnings%20OR%20launch', predCat: 'business', emoji: '💼', formats: 'business' },
-    { category: 'world', q: 'summit%20OR%20treaty%20OR%20sanctions%20OR%20crisis%20OR%20agreement', predCat: 'world', emoji: '🌍', formats: 'general', prioritydomain: 'top' },
+  ],
+  // Cycle 12: FOOTBALL DRAMA + MOTORSPORT + CYCLING + CRYPTO
+  [
+    { category: 'sports', q: 'Premier%20League%20OR%20Champions%20League%20OR%20La%20Liga%20OR%20Serie%20A%20OR%20Ligue%201', predCat: 'sports_news', emoji: '⚽', formats: 'sports' },
+    { category: 'sports', q: 'F1%20OR%20Formula%201%20OR%20MotoGP%20OR%20rally%20OR%20Le%20Mans%20OR%20WRC', predCat: 'motorsport', emoji: '🏎', formats: 'motorsport' },
+    { category: 'sports', q: 'Tour%20de%20France%20OR%20cycling%20OR%20Giro%20OR%20Vuelta%20OR%20peloton', predCat: 'cycling', emoji: '🚴', formats: 'sports' },
     { endpoint: 'crypto', coin: 'btc,eth,sol,doge', predCat: 'crypto', emoji: '₿', formats: 'crypto' },
+  ],
+  // Cycle 13: NBA/NFL NEWS + WRESTLING + ATHLETICS + WORLD
+  [
+    { category: 'sports', q: 'NBA%20OR%20trade%20OR%20draft%20OR%20MVP%20OR%20All-Star%20OR%20playoffs', predCat: 'sports_news', emoji: '🏀', formats: 'sports' },
+    { category: 'sports', q: 'WWE%20OR%20WrestleMania%20OR%20Royal%20Rumble%20OR%20wrestling%20OR%20AEW', predCat: 'wrestling', emoji: '💪', formats: 'combat_news' },
+    { category: 'sports', q: 'athletics%20OR%20sprint%20OR%20marathon%20OR%20Olympic%20OR%20world%20record%20OR%20swimming', predCat: 'athletics', emoji: '🏃', formats: 'sports' },
+    { category: 'world', q: 'summit%20OR%20treaty%20OR%20sanctions%20OR%20crisis%20OR%20agreement', predCat: 'world', emoji: '🌍', formats: 'general', prioritydomain: 'top' },
+  ],
+  // Cycle 14: ESPORTS + COMBAT + TENNIS + TRENDING
+  [
+    { category: 'sports', q: 'esports%20OR%20League%20of%20Legends%20OR%20Valorant%20OR%20Counter-Strike%20OR%20Worlds', predCat: 'esports', emoji: '🕹', formats: 'sports' },
+    { category: 'sports', q: 'UFC%20OR%20MMA%20OR%20fight%20card%20OR%20weigh-in%20OR%20title%20bout', predCat: 'combat_news', emoji: '🥊', formats: 'combat_news' },
+    { category: 'sports', q: 'tennis%20OR%20Australian%20Open%20OR%20final%20OR%20seed%20OR%20upset', predCat: 'tennis', emoji: '🎾', formats: 'tennis' },
+    { category: 'top', q: null, predCat: 'trending', emoji: '🔥', formats: 'general', prioritydomain: 'top' },
   ],
 ];
 
@@ -272,6 +301,34 @@ const NEWS_FORMATS_BY_TYPE = {
     { suffix: ' — Will this impact the season?', a: 'Season changer', b: 'Minor move' },
     { suffix: ' — Fans happy or furious?', a: 'Fans love it', b: 'Fans furious' },
     { suffix: ' — Dynasty building or desperate move?', a: 'Dynasty mode', b: 'Desperate' },
+    { suffix: ' — GOAT move or overrated?', a: 'GOAT move', b: 'Overrated' },
+    { suffix: ' — Will they pull it off?', a: 'YES, lock it in', b: 'NO chance' },
+    { suffix: ' — Historic or forgotten by next week?', a: 'Historic', b: 'Forgotten' },
+    { suffix: ' — Underdog story incoming?', a: 'Underdog wins', b: 'Favorite cruises' },
+    { suffix: ' — Will this break a record?', a: 'Record broken', b: 'Not even close' },
+    { suffix: ' — Comeback or it\'s over?', a: 'Comeback loading', b: 'It\'s a wrap' },
+  ],
+  motorsport: [
+    { suffix: ' — Will this shake up the standings?', a: 'Standings shaken', b: 'No change' },
+    { suffix: ' — Podium or disaster?', a: 'Podium finish', b: 'Disaster race' },
+    { suffix: ' — Best race of the season?', a: 'Instant classic', b: 'Boring race' },
+    { suffix: ' — Will there be a crash?', a: 'Drama incoming', b: 'Clean race' },
+    { suffix: ' — Team orders controversy?', a: 'Controversy alert', b: 'Fair racing' },
+    { suffix: ' — Rookie surprise?', a: 'Rookie shines', b: 'Veterans dominate' },
+  ],
+  tennis: [
+    { suffix: ' — Upset incoming?', a: 'Upset happens', b: 'Favorite wins' },
+    { suffix: ' — Straight sets or a battle?', a: 'Straight sets', b: 'Epic 5-setter' },
+    { suffix: ' — GOAT debate material?', a: 'GOAT moment', b: 'Just another match' },
+    { suffix: ' — Will the crowd factor matter?', a: 'Crowd decides it', b: 'No effect' },
+    { suffix: ' — New era or same dominance?', a: 'New era', b: 'Same old story' },
+  ],
+  combat_news: [
+    { suffix: ' — Fight of the year?', a: 'FOTY contender', b: 'Forgettable' },
+    { suffix: ' — KO or distance?', a: 'Early KO', b: 'Goes the distance' },
+    { suffix: ' — Upset on the cards?', a: 'Upset incoming', b: 'No chance' },
+    { suffix: ' — Will it live up to the hype?', a: 'Exceeds the hype', b: 'Overhyped' },
+    { suffix: ' — Rematch needed?', a: 'Run it back', b: 'Clear winner' },
   ],
   lifestyle: [
     { suffix: ' — Trend or fad?', a: 'Here to stay', b: 'Gone in a month' },
