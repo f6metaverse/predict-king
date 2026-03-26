@@ -186,7 +186,7 @@ const NEWS_ROTATION = [
   ],
   // Cycle 9: French news + Drama + Food + World sentiment
   [
-    { category: 'top', q: null, predCat: 'trending', emoji: '🇫🇷', formats: 'general', language: 'fr', country: 'fr' },
+    { category: 'top', q: null, predCat: 'trending', emoji: '🔥', formats: 'general', prioritydomain: 'top' },
     { category: 'technology', q: 'AI%20OR%20robot%20OR%20ChatGPT%20OR%20autonomous%20OR%20deepfake', predCat: 'drama', emoji: '🤖', formats: 'tech' },
     { category: 'food', q: 'restaurant%20OR%20chef%20OR%20recipe%20OR%20vegan%20OR%20fast%20food', predCat: 'food', emoji: '🍔', formats: 'lifestyle' },
     { category: 'world', q: null, predCat: 'world', emoji: '🌍', formats: 'general', sentiment: 'negative' },
