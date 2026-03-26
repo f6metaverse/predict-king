@@ -183,6 +183,20 @@ const NEWS_ROTATION = [
     { category: 'food', q: 'restaurant%20OR%20chef%20OR%20recipe%20OR%20vegan%20OR%20fast%20food', predCat: 'food', emoji: '🍔', formats: 'lifestyle' },
     { category: 'world', q: null, predCat: 'world', emoji: '🌍', formats: 'general', sentiment: 'negative' },
   ],
+  // Cycle 10: EVENT HUNTER — specifically looks for upcoming events
+  [
+    { category: 'entertainment', q: 'premiere%20OR%20finale%20OR%20release%20OR%20ceremony%20OR%20award%20show', predCat: 'cinema', emoji: '🎬', formats: 'entertainment' },
+    { category: 'entertainment', q: 'concert%20OR%20tour%20OR%20festival%20OR%20show%20OR%20live%20event', predCat: 'musique', emoji: '🎵', formats: 'entertainment' },
+    { category: 'politics', q: 'summit%20OR%20debate%20OR%20election%20OR%20hearing%20OR%20vote', predCat: 'politics', emoji: '🏛', formats: 'politics' },
+    { category: 'technology', q: 'launch%20OR%20keynote%20OR%20announcement%20OR%20reveal%20OR%20event', predCat: 'drama', emoji: '🚀', formats: 'tech' },
+  ],
+  // Cycle 11: MORE EVENTS — sports transfers, business moves, world events
+  [
+    { category: 'sports', q: 'trade%20OR%20transfer%20OR%20draft%20OR%20playoffs%20OR%20final', predCat: 'sports_news', emoji: '📰', formats: 'sports' },
+    { category: 'business', q: 'IPO%20OR%20merger%20OR%20acquisition%20OR%20earnings%20OR%20launch', predCat: 'business', emoji: '💼', formats: 'business' },
+    { category: 'world', q: 'summit%20OR%20treaty%20OR%20sanctions%20OR%20crisis%20OR%20agreement', predCat: 'world', emoji: '🌍', formats: 'general', prioritydomain: 'top' },
+    { endpoint: 'crypto', coin: 'btc,eth,sol,doge', predCat: 'crypto', emoji: '₿', formats: 'crypto' },
+  ],
 ];
 
 // Question formats per category context — way more variety
@@ -806,14 +820,18 @@ async function generateFromNews(newsConfig) {
         finalFmt = negativeFmts[Math.floor(Math.random() * negativeFmts.length)];
       }
 
+      // Smart expiry: upcoming events stay longer, regular news = 12h
+      const expiry = getSmartExpiry(article.title, article.description);
+      const isEvent = expiry !== expiresInHours(12);
+
       predictions.push({
         question: `"${title}"${finalFmt.suffix}`,
         optionA: finalFmt.a, optionB: finalFmt.b,
         category: newsConfig.predCat, emoji: newsConfig.emoji,
-        expiresAt: expiresInHours(12),
+        expiresAt: expiry,
         metadata: {
           source: 'newsdata',
-          type: 'opinion',
+          type: isEvent ? 'event' : 'opinion',
           articleId: article.article_id,
           sentiment: article.sentiment || null,
           sourceUrl: article.link || null
@@ -827,8 +845,65 @@ async function generateFromNews(newsConfig) {
   return pickRandom(predictions, 3);
 }
 
-// No more static opinion pools — everything comes from live APIs
-// If news API fails, categories just wait for the next cycle
+// ============================================
+// SMART EXPIRY — detect upcoming events in news articles
+// If article talks about a future event, keep prediction alive until then
+// ============================================
+
+const EVENT_KEYWORDS = [
+  // Time references (upcoming)
+  'this weekend', 'this saturday', 'this sunday', 'this friday',
+  'next week', 'next month', 'tomorrow', 'coming soon',
+  'upcoming', 'set to', 'scheduled', 'is expected',
+  'will take place', 'will be held', 'slated for',
+  // Entertainment events
+  'premiere', 'premieres', 'finale', 'season finale', 'series finale',
+  'release date', 'releases', 'drops', 'launching', 'launches',
+  'ceremony', 'award show', 'oscars', 'emmys', 'grammys', 'golden globe',
+  'super bowl', 'halftime',
+  'concert', 'tour', 'festival', 'coachella',
+  'fight night', 'pay-per-view', 'ppv', 'main event',
+  // Politics/World events
+  'summit', 'debate', 'hearing', 'vote', 'election day',
+  'inauguration', 'trial begins', 'verdict',
+  'g7', 'g20', 'un assembly', 'nato',
+  // Tech/Business events
+  'keynote', 'product launch', 'wwdc', 'google i/o', 'ces ',
+  'earnings report', 'ipo', 'going public',
+  // Sports events
+  'draft', 'trade deadline', 'all-star', 'playoffs',
+  'world cup', 'champions league', 'grand prix',
+];
+
+function getSmartExpiry(articleTitle, articleDescription) {
+  const text = `${articleTitle} ${articleDescription || ''}`.toLowerCase();
+
+  // Check if article mentions a future event
+  const isEvent = EVENT_KEYWORDS.some(kw => text.includes(kw));
+
+  if (isEvent) {
+    // Check if it's this weekend (2-4 days)
+    if (text.includes('this weekend') || text.includes('this saturday') ||
+        text.includes('this sunday') || text.includes('this friday')) {
+      // Expire Sunday night (find next Sunday)
+      const now = new Date();
+      const dayOfWeek = now.getUTCDay();
+      const daysUntilSunday = dayOfWeek === 0 ? 7 : 7 - dayOfWeek;
+      return expiresInHours(daysUntilSunday * 24);
+    }
+
+    // "next week" or "next month" = keep for 7 days
+    if (text.includes('next week') || text.includes('next month') || text.includes('slated for')) {
+      return expiresInHours(168); // 7 days
+    }
+
+    // Generic upcoming event = keep for 72h (3 days)
+    return expiresInHours(72);
+  }
+
+  // Regular news = 12h
+  return expiresInHours(12);
+}
 
 // ============================================
 // SMART GENERATOR - Main engine
