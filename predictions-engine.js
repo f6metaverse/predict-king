@@ -352,25 +352,36 @@ async function generateFootballLive() {
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    const dates = getNextDays(13); // 14 days = this week + next week
-    const fromDate = dates[0];
-    const toDate = dates[dates.length - 1];
+    const dates = getNextDays(6); // 7 days ahead
     const season = getCurrentSeason();
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
 
-    // 1 API call for 14 days of fixtures
-    const res = await fetch(`https://v3.football.api-sports.io/fixtures?from=${fromDate}&to=${toDate}&season=${season}`, { headers });
-    const data = await res.json();
+    // Fetch each date individually (from/to not supported on free plan)
+    const allMatches = [];
+    for (const date of dates) {
+      try {
+        const res = await fetch(`https://v3.football.api-sports.io/fixtures?date=${date}&season=${season}`, { headers });
+        const data = await res.json();
+        if (data.response) {
+          allMatches.push(...data.response);
+        }
+        if (data.errors && Object.keys(data.errors).length > 0) {
+          console.error(`Football API error for ${date}:`, JSON.stringify(data.errors));
+        }
+      } catch (e) {
+        console.error(`Football fetch error for ${date}:`, e.message);
+      }
+    }
 
-    if (!data.response) return predictions;
+    if (allMatches.length === 0) return predictions;
 
     // Prioritize top leagues, then fill with others
-    const topMatches = data.response.filter(m => TOP_FOOTBALL_LEAGUES.includes(m.league?.id));
-    const otherMatches = data.response.filter(m => !TOP_FOOTBALL_LEAGUES.includes(m.league?.id));
-    const allMatches = [...topMatches, ...otherMatches];
+    const topMatches = allMatches.filter(m => TOP_FOOTBALL_LEAGUES.includes(m.league?.id));
+    const otherMatches = allMatches.filter(m => !TOP_FOOTBALL_LEAGUES.includes(m.league?.id));
+    const sortedMatches = [...topMatches, ...otherMatches];
 
     // Only upcoming matches (not started/finished)
-    const upcoming = allMatches.filter(m =>
+    const upcoming = sortedMatches.filter(m =>
       m.fixture?.status?.short === 'NS' || m.fixture?.status?.short === 'TBD'
     );
 
@@ -606,8 +617,11 @@ async function generateCombatLive() {
       headers: { 'x-apisports-key': FOOTBALL_API_KEY }
     });
     const data = await res.json();
+    if (data.errors && Object.keys(data.errors).length > 0) {
+      console.error('MMA API errors:', JSON.stringify(data.errors));
+    }
 
-    if (data.response) {
+    if (data.response && Array.isArray(data.response)) {
       for (const fight of data.response.slice(0, 5)) {
         if (!fight.fighters?.first?.name || !fight.fighters?.second?.name) continue;
         const f1 = fight.fighters.first.name;
@@ -656,8 +670,11 @@ async function generateF1Live() {
       headers: { 'x-apisports-key': FOOTBALL_API_KEY }
     });
     const data = await res.json();
+    if (data.errors && Object.keys(data.errors).length > 0) {
+      console.error('F1 API errors:', JSON.stringify(data.errors));
+    }
 
-    if (data.response) {
+    if (data.response && Array.isArray(data.response)) {
       for (const race of data.response.slice(0, 3)) {
         const name = race.competition?.name || 'next race';
         const kickoff = race.date;
