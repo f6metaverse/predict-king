@@ -154,7 +154,8 @@ const NEWS_FORMATS = [
 
 // ============================================
 // API-SPORTS GENERATORS
-// All fetch 7 days ahead, expire at kickoff
+// Weekly fetch: 14 days for leagues, 21 days for events
+// Only called on schedule days (Mon/Wed) or emergency
 // ============================================
 
 // Top football leagues to prioritize
@@ -165,13 +166,13 @@ async function generateFootballLive() {
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    const dates = getNextDays(6);
+    const dates = getNextDays(13); // 14 days = this week + next week
     const fromDate = dates[0];
     const toDate = dates[dates.length - 1];
     const season = getCurrentSeason();
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
 
-    // 1 API call for 7 days of fixtures
+    // 1 API call for 14 days of fixtures
     const res = await fetch(`https://v3.football.api-sports.io/fixtures?from=${fromDate}&to=${toDate}&season=${season}`, { headers });
     const data = await res.json();
 
@@ -239,13 +240,11 @@ async function generateNBALive() {
     if (!FOOTBALL_API_KEY) return predictions;
 
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
-    const dates = getNextDays(6);
+    const dates = getNextDays(6); // 7 days ahead
 
-    // Fetch next 4 days to cover upcoming games (4 API calls)
-    const datesToFetch = dates.slice(0, 4);
+    // Fetch next 7 days of games
     const allGames = [];
-
-    for (const date of datesToFetch) {
+    for (const date of dates) {
       try {
         const res = await fetch(`https://v1.basketball.api-sports.io/games?date=${date}`, { headers });
         const data = await res.json();
@@ -261,7 +260,7 @@ async function generateNBALive() {
       }
     }
 
-    for (const game of allGames.slice(0, 6)) {
+    for (const game of allGames.slice(0, 8)) {
       const home = game.teams.home.name;
       const away = game.teams.away.name;
       const kickoff = game.date || game.time;
@@ -310,7 +309,7 @@ async function generateNFLLive() {
     const dates = getNextDays(6);
 
     const allGames = [];
-    for (const date of dates.slice(0, 4)) {
+    for (const date of dates) {
       try {
         const res = await fetch(`https://v1.american-football.api-sports.io/games?date=${date}`, { headers });
         const data = await res.json();
@@ -359,7 +358,7 @@ async function generateHockeyLive() {
     const dates = getNextDays(6);
 
     const allGames = [];
-    for (const date of dates.slice(0, 4)) {
+    for (const date of dates) {
       try {
         const res = await fetch(`https://v1.hockey.api-sports.io/games?date=${date}`, { headers });
         const data = await res.json();
@@ -417,7 +416,7 @@ async function generateCombatLive() {
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    const res = await fetch('https://v1.mma.api-sports.io/fights?next=10', {
+    const res = await fetch('https://v1.mma.api-sports.io/fights?next=15', {
       headers: { 'x-apisports-key': FOOTBALL_API_KEY }
     });
     const data = await res.json();
@@ -467,7 +466,7 @@ async function generateF1Live() {
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    const res = await fetch('https://v1.formula-1.api-sports.io/races?next=5', {
+    const res = await fetch('https://v1.formula-1.api-sports.io/races?next=8', {
       headers: { 'x-apisports-key': FOOTBALL_API_KEY }
     });
     const data = await res.json();
@@ -522,7 +521,7 @@ async function generateRugbyLive() {
     const dates = getNextDays(6);
 
     const allGames = [];
-    for (const date of dates.slice(0, 4)) {
+    for (const date of dates) {
       try {
         const res = await fetch(`https://v1.rugby.api-sports.io/games?date=${date}`, { headers });
         const data = await res.json();
@@ -741,53 +740,46 @@ async function addIfNotDupe(pred, activeList) {
   return false;
 }
 
-async function smartGenerate() {
-  console.log('\n=== Smart generation cycle ===');
-
-  const active = await db.getActivePredictions();
+// -------------------------------------------------------------------
+// WEEKLY SPORT FETCH — big batch, called Mon + Wed only (or emergency)
+// Fetches ALL sports at once, 14 days ahead for football, 7 for others
+// -------------------------------------------------------------------
+async function weeklySportsFetch(active) {
+  console.log('  WEEKLY SPORTS FETCH — loading all upcoming events...');
   let totalGenerated = 0;
 
-  // Count per category
-  const counts = {};
-  for (const cat of Object.keys(MIN_SLOTS)) {
-    counts[cat] = active.filter(p => p.category === cat).length;
-  }
-  console.log('Active counts:', JSON.stringify(counts));
-  console.log(`Total active: ${active.length}`);
+  const allSports = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1'];
 
-  // === STEP 1: API-Sports rotation ===
-  const sportsToFetch = API_SPORTS_ROTATION[apiSportsCycleIndex % API_SPORTS_ROTATION.length];
-  apiSportsCycleIndex++;
-  console.log(`Sports rotation: [${sportsToFetch.join(', ')}]`);
-
-  for (const sport of sportsToFetch) {
-    // Skip if we already have enough predictions for this sport
-    if ((counts[sport] || 0) >= MIN_SLOTS[sport] * 2) {
-      console.log(`  ${sport}: already ${counts[sport]} active, skipping API call`);
-      continue;
-    }
-
+  for (const sport of allSports) {
     const generator = SPORT_GENERATORS[sport];
     if (!generator) continue;
     try {
       const preds = await generator();
+      let added = 0;
       for (const pred of preds) {
         if (await addIfNotDupe(pred, active)) {
           totalGenerated++;
+          added++;
           active.push(pred);
         }
       }
-      if (preds.length > 0) {
-        console.log(`  ${sport}: +${preds.length} live (7-day lookahead)`);
-      } else {
-        console.log(`  ${sport}: 0 upcoming events found`);
-      }
+      console.log(`    ${sport}: ${preds.length} found, ${added} new added`);
     } catch (e) {
-      console.error(`  ${sport} error:`, e.message);
+      console.error(`    ${sport} error:`, e.message);
     }
   }
 
-  // === STEP 2: Crypto live price (CoinGecko - always, cheap quota) ===
+  return totalGenerated;
+}
+
+// -------------------------------------------------------------------
+// LIGHT CYCLE — crypto + news only (called every 3h)
+// Sports are already loaded from weekly fetch
+// -------------------------------------------------------------------
+async function lightCycle(active, counts) {
+  let totalGenerated = 0;
+
+  // Crypto: prices change constantly, always worth refreshing
   if ((counts.crypto || 0) < 5) {
     try {
       const cryptoLive = await generateCryptoLive();
@@ -803,10 +795,10 @@ async function smartGenerate() {
     }
   }
 
-  // === STEP 3: News rotation ===
+  // News rotation: fresh content every cycle
   const newsToFetch = NEWS_ROTATION[newsCycleIndex % NEWS_ROTATION.length];
   newsCycleIndex++;
-  console.log(`News rotation: [${newsToFetch.map(n => n.predCat).join(', ')}]`);
+  console.log(`  News rotation: [${newsToFetch.map(n => n.predCat).join(', ')}]`);
 
   for (const newsConfig of newsToFetch) {
     try {
@@ -823,15 +815,11 @@ async function smartGenerate() {
     }
   }
 
-  // === STEP 4: Fill remaining gaps with opinion backup (NON-SPORT only) ===
-  const updatedCounts = {};
-  for (const cat of Object.keys(MIN_SLOTS)) {
-    updatedCounts[cat] = active.filter(p => p.category === cat).length;
-  }
-
+  // Opinion backup for non-sport categories only
   const opinionCategories = ['musique', 'gaming', 'cinema', 'drama', 'debate'];
   for (const cat of opinionCategories) {
-    const deficit = (MIN_SLOTS[cat] || 0) - (updatedCounts[cat] || 0);
+    const catCount = active.filter(p => p.category === cat).length;
+    const deficit = (MIN_SLOTS[cat] || 0) - catCount;
     if (deficit <= 0) continue;
 
     const opinions = generateOpinionPredictions(cat, deficit);
@@ -843,6 +831,48 @@ async function smartGenerate() {
     }
     if (opinions.length > 0) console.log(`  ${cat} opinion backup: +${opinions.length}`);
   }
+
+  return totalGenerated;
+}
+
+// -------------------------------------------------------------------
+// SMART GENERATE — decides what to do based on day of week
+// -------------------------------------------------------------------
+async function smartGenerate(forceWeekly = false) {
+  const now = new Date();
+  const dayOfWeek = now.getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  const hour = now.getUTCHours();
+
+  console.log(`\n=== Smart generation cycle (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayOfWeek]} ${hour}:00 UTC) ===`);
+
+  const active = await db.getActivePredictions();
+  let totalGenerated = 0;
+
+  // Count per category
+  const counts = {};
+  for (const cat of Object.keys(MIN_SLOTS)) {
+    counts[cat] = active.filter(p => p.category === cat).length;
+  }
+  console.log('Active counts:', JSON.stringify(counts));
+  console.log(`Total active: ${active.length}`);
+
+  // --- Decide if we need a weekly sports fetch ---
+  const sportCategories = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1'];
+  const totalSportPreds = sportCategories.reduce((sum, cat) => sum + (counts[cat] || 0), 0);
+
+  const isWeeklyDay = (dayOfWeek === 1 || dayOfWeek === 3); // Monday or Wednesday
+  const isMorning = (hour >= 6 && hour <= 10);
+  const isEmergency = totalSportPreds < 5;
+
+  if (forceWeekly || (isWeeklyDay && isMorning) || isEmergency) {
+    if (isEmergency) console.log(`  EMERGENCY: only ${totalSportPreds} sport predictions active!`);
+    totalGenerated += await weeklySportsFetch(active);
+  } else {
+    console.log(`  Sports: ${totalSportPreds} active, skipping API (next fetch: Mon/Wed morning)`);
+  }
+
+  // --- Always run crypto + news + opinion backup ---
+  totalGenerated += await lightCycle(active, counts);
 
   console.log(`=== Generated ${totalGenerated} total ===\n`);
   return totalGenerated;
@@ -862,12 +892,20 @@ async function cleanupExpired() {
 }
 
 async function startScheduler() {
-  console.log('Prediction scheduler started (3h cycle, 7-day lookahead)');
+  console.log('Prediction scheduler started');
+  console.log('  Sports: Mon + Wed morning (or emergency if < 5 sport preds)');
+  console.log('  Crypto + News: every 3h');
 
-  // Generate on startup
+  // On startup: always do a full weekly fetch to fill the app
   const active = await db.getActivePredictions();
-  if (active.length < 15) {
-    await smartGenerate();
+  const sportCategories = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1'];
+  const totalSport = sportCategories.reduce((sum, cat) => sum + active.filter(p => p.category === cat).length, 0);
+
+  if (totalSport < 10) {
+    console.log('Startup: low sport content, running full weekly fetch...');
+    await smartGenerate(true); // force weekly
+  } else {
+    await smartGenerate(); // normal cycle (crypto + news only unless Mon/Wed)
   }
 
   // Main cycle: every 3 hours
@@ -876,20 +914,20 @@ async function startScheduler() {
     await smartGenerate();
   }, 3 * 60 * 60 * 1000);
 
-  // Hourly check: emergency fill if running low
+  // Hourly emergency check
   setInterval(async () => {
     await cleanupExpired();
     const current = await db.getActivePredictions();
     if (current.length < 10) {
       console.log('LOW CONTENT ALERT - emergency generation...');
-      await smartGenerate();
+      await smartGenerate(true); // force weekly fetch
     }
   }, 60 * 60 * 1000);
 }
 
 // Backward compatibility
 async function generateDailyPredictions() {
-  return smartGenerate();
+  return smartGenerate(true);
 }
 
 module.exports = { generateDailyPredictions, cleanupExpired, startScheduler };
