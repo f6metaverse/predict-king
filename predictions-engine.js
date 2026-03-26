@@ -85,8 +85,6 @@ const MIN_SLOTS = {
   food: 1,
   education: 1,
   tourism: 1,
-  // Opinion backup
-  debate: 2
 };
 
 // ============================================
@@ -600,27 +598,30 @@ async function generateF1Live() {
           raceName: name
         };
 
-        predictions.push({
-          question: `🏎 F1 ${name}: Who takes pole? (${dateStr})`,
-          optionA: 'Verstappen', optionB: 'Someone else',
-          category: 'f1', emoji: '🏎',
-          expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(72),
-          metadata: { ...baseMetadata, predType: 'pole' }
-        });
-        predictions.push({
-          question: `🏎 F1 ${name}: Safety Car? (${dateStr})`,
-          optionA: 'YES', optionB: 'NO',
-          category: 'f1', emoji: '🏎',
-          expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(72),
-          metadata: { ...baseMetadata, predType: 'safety_car' }
-        });
-        predictions.push({
-          question: `🏎 F1 ${name}: Who wins the race? (${dateStr})`,
-          optionA: 'Verstappen', optionB: 'Norris',
-          category: 'f1', emoji: '🏎',
-          expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(72),
-          metadata: { ...baseMetadata, predType: 'race_winner' }
-        });
+        const expiry = kickoff ? expiresAtKickoff(kickoff) : expiresInHours(72);
+
+        // Dynamic F1 predictions — no hardcoded driver names
+        const f1Templates = [
+          { question: `🏎 F1 ${name}: Who takes pole? (${dateStr})`, optionA: 'Red Bull', optionB: 'McLaren', predType: 'pole' },
+          { question: `🏎 F1 ${name}: Safety Car during the race? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'safety_car' },
+          { question: `🏎 F1 ${name}: Will the polesitter win? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'pole_wins' },
+          { question: `🏎 F1 ${name}: Top 3 finish for Ferrari? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'ferrari_podium' },
+          { question: `🏎 F1 ${name}: Red Bull vs McLaren — Who wins? (${dateStr})`, optionA: 'Red Bull', optionB: 'McLaren', predType: 'team_battle' },
+          { question: `🏎 F1 ${name}: Any DNF in top 5? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'dnf' },
+          { question: `🏎 F1 ${name}: Over 1 pit stop for the winner? (${dateStr})`, optionA: 'Multi-stop', optionB: '1-stop', predType: 'pit_strategy' },
+        ];
+
+        // Pick 3 different templates for this race
+        const picked = pickRandom(f1Templates, 3);
+        for (const tmpl of picked) {
+          predictions.push({
+            question: tmpl.question,
+            optionA: tmpl.optionA, optionB: tmpl.optionB,
+            category: 'f1', emoji: '🏎',
+            expiresAt: expiry,
+            metadata: { ...baseMetadata, predType: tmpl.predType }
+          });
+        }
       }
     }
   } catch (e) {
@@ -826,51 +827,8 @@ async function generateFromNews(newsConfig) {
   return pickRandom(predictions, 3);
 }
 
-// ============================================
-// OPINION BACKUP (minimal — only for non-sport categories when APIs fail)
-// ============================================
-const OPINION_POOLS = {
-  musique: [
-    { question: 'Drake or Kendrick: who wins?', optionA: 'Drake', optionB: 'Kendrick', emoji: '🎵' },
-    { question: 'Biggest artist in the world?', optionA: 'Taylor Swift', optionB: 'Bad Bunny', emoji: '🎵' },
-    { question: 'K-Pop taking over?', optionA: 'Already did', optionB: 'Overhyped', emoji: '🇰🇷' },
-    { question: 'Best rapper alive?', optionA: 'Kendrick', optionB: 'J. Cole', emoji: '🎤' },
-  ],
-  gaming: [
-    { question: 'GTA 6 living up to the hype?', optionA: 'Legendary', optionB: 'Overhyped', emoji: '🎮' },
-    { question: 'PC or Console?', optionA: 'PC master race', optionB: 'Console vibes', emoji: '🎮' },
-    { question: 'PS5 or Xbox?', optionA: 'PlayStation', optionB: 'Xbox', emoji: '🎮' },
-    { question: 'Nintendo Switch 2: day one buy?', optionA: 'Day one', optionB: 'Wait', emoji: '🎮' },
-  ],
-  cinema: [
-    { question: 'Marvel done or coming back?', optionA: 'Comeback arc', optionB: 'Fatigue is real', emoji: '🎬' },
-    { question: 'Netflix or Disney+?', optionA: 'Netflix', optionB: 'Disney+', emoji: '📺' },
-    { question: 'Anime mainstream now?', optionA: 'Fully mainstream', optionB: 'Still niche', emoji: '🎌' },
-  ],
-  drama: [
-    { question: 'Elon Musk: genius or villain?', optionA: 'Genius', optionB: 'Villain arc', emoji: '👀' },
-    { question: 'AI taking your job in 5 years?', optionA: 'Probably', optionB: 'Humans irreplaceable', emoji: '🤖' },
-    { question: 'TikTok: creative or brain rot?', optionA: 'Creative', optionB: 'Brain rot', emoji: '📱' },
-  ],
-  debate: [
-    { question: 'Morning person or night owl?', optionA: 'Early bird', optionB: 'Night owl', emoji: '🌅' },
-    { question: 'Cats or dogs?', optionA: 'Dogs forever', optionB: 'Cats superior', emoji: '🐾' },
-    { question: 'Android or iPhone?', optionA: 'Android', optionB: 'iPhone', emoji: '📱' },
-    { question: 'Pineapple on pizza?', optionA: 'Delicious', optionB: 'Crime', emoji: '🍕' },
-  ]
-};
-
-function generateOpinionPredictions(category, count) {
-  const pool = OPINION_POOLS[category];
-  if (!pool || pool.length === 0) return [];
-
-  return pickRandom(pool, count).map(p => ({
-    ...p,
-    category,
-    expiresAt: expiresInHours(12),
-    metadata: { type: 'opinion' }
-  }));
-}
+// No more static opinion pools — everything comes from live APIs
+// If news API fails, categories just wait for the next cycle
 
 // ============================================
 // SMART GENERATOR - Main engine
@@ -972,23 +930,6 @@ async function lightCycle(active, counts) {
     } catch (e) {
       console.error(`  ${newsConfig.predCat} news error:`, e.message);
     }
-  }
-
-  // Opinion backup for non-sport categories only
-  const opinionCategories = ['musique', 'gaming', 'cinema', 'drama', 'debate'];
-  for (const cat of opinionCategories) {
-    const catCount = active.filter(p => p.category === cat).length;
-    const deficit = (MIN_SLOTS[cat] || 0) - catCount;
-    if (deficit <= 0) continue;
-
-    const opinions = generateOpinionPredictions(cat, deficit);
-    for (const pred of opinions) {
-      if (await addIfNotDupe(pred, active)) {
-        totalGenerated++;
-        active.push(pred);
-      }
-    }
-    if (opinions.length > 0) console.log(`  ${cat} opinion backup: +${opinions.length}`);
   }
 
   return totalGenerated;

@@ -148,6 +148,14 @@ function renderPrediction(p) {
     science: '🔬 Science',
     health: '💪 Health',
     trending: '🔥 Trending',
+    crime: '🚨 Crime',
+    environment: '🌱 Planet',
+    business: '💼 Business',
+    sports_news: '📰 Transfers',
+    lifestyle: '✨ Lifestyle',
+    food: '🍔 Food',
+    education: '🎓 Education',
+    tourism: '✈️ Tourism',
     general: '🔮 General'
   };
 
