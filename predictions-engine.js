@@ -62,7 +62,7 @@ const MIN_SLOTS = {
   crypto: 3,
   football: 3,
   nba: 2,
-  combat: 1,
+  combat: 5,
   f1: 2,
   nfl: 1,
   hockey: 2,
@@ -669,27 +669,76 @@ async function generateCombatLive() {
         }
         if (data.errors && Object.keys(data.errors).length > 0) {
           console.error('MMA API errors:', JSON.stringify(data.errors));
-          break; // Stop if endpoint doesn't work
+          break;
         }
       } catch (e) {
         console.error(`MMA fetch error for ${date}:`, e.message);
       }
     }
 
-    if (mmaAllFights.length > 0) {
-      for (const fight of mmaAllFights.slice(0, 5)) {
-        if (!fight.fighters?.first?.name || !fight.fighters?.second?.name) continue;
-        const f1 = fight.fighters.first.name;
-        const f2 = fight.fighters.second.name;
-        const kickoff = fight.date;
-        const fightId = fight.id;
-        const dateStr = kickoff ? formatMatchDate(kickoff) : 'Coming soon';
+    // Filter out cancelled/finished fights, keep only upcoming
+    const activeFights = mmaAllFights.filter(f =>
+      f.fighters?.first?.name && f.fighters?.second?.name &&
+      f.status?.short !== 'CANC' && f.status?.short !== 'FT' &&
+      f.status?.short !== 'POST'
+    );
 
-        const baseMetadata = {
-          fightId, kickoff, apiType: 'mma',
-          fighter1: f1, fighter2: f2
-        };
+    // Smart ranking: main events first, then main card (later times), then prelims
+    // UFC cards: prelims = early times, main card = later times, main event = is_main
+    const rankedFights = [...activeFights].sort((a, b) => {
+      // 1) Main event ALWAYS first
+      if (a.is_main && !b.is_main) return -1;
+      if (!a.is_main && b.is_main) return 1;
+      // 2) Later fights = higher on the card (main card > prelims)
+      const timeA = new Date(a.date).getTime();
+      const timeB = new Date(b.date).getTime();
+      return timeB - timeA;
+    });
 
+    // Take top 8 fights (main event + co-main + main card)
+    const topFights = rankedFights.slice(0, 8);
+    const eventName = topFights[0]?.slug || '';
+
+    for (const fight of topFights) {
+      const f1 = fight.fighters.first.name;
+      const f2 = fight.fighters.second.name;
+      const kickoff = fight.date;
+      const fightId = fight.id;
+      const weightClass = fight.category || '';
+      const dateStr = kickoff ? formatMatchDate(kickoff) : 'Coming soon';
+      const isMain = fight.is_main;
+
+      const baseMetadata = {
+        fightId, kickoff, apiType: 'mma',
+        fighter1: f1, fighter2: f2,
+        weightClass, isMain, eventName
+      };
+
+      // Main event gets BOTH question types (winner + method)
+      // Other fights get one random type
+      if (isMain) {
+        predictions.push({
+          question: `🥊 MAIN EVENT: ${f1} vs ${f2} — Who wins? (${dateStr})`,
+          optionA: f1, optionB: f2,
+          metadata: { ...baseMetadata, predType: 'winner' },
+          category: 'combat', emoji: '🥊',
+          expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(72)
+        });
+        predictions.push({
+          question: `🥊 ${f1} vs ${f2}: KO/TKO or Goes to Decision? (${dateStr})`,
+          optionA: 'KO/TKO/Sub', optionB: 'Decision',
+          metadata: { ...baseMetadata, predType: 'method' },
+          category: 'combat', emoji: '🥊',
+          expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(72)
+        });
+        predictions.push({
+          question: `🥊 ${f1} vs ${f2} — Over or Under 2.5 rounds? (${dateStr})`,
+          optionA: 'Under 2.5', optionB: 'Over 2.5',
+          metadata: { ...baseMetadata, predType: 'rounds' },
+          category: 'combat', emoji: '🥊',
+          expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(72)
+        });
+      } else {
         const templates = [
           {
             question: `🥊 ${f1} vs ${f2} — Who wins? (${dateStr})`,
@@ -702,7 +751,6 @@ async function generateCombatLive() {
             metadata: { ...baseMetadata, predType: 'method' }
           },
         ];
-
         predictions.push({
           ...templates[Math.floor(Math.random() * templates.length)],
           category: 'combat', emoji: '🥊',
@@ -713,7 +761,10 @@ async function generateCombatLive() {
   } catch (e) {
     console.error('MMA API error:', e.message);
   }
-  return pickRandom(predictions, 3);
+  // Main event predictions (up to 3) + pick 4 from the rest = up to 7 combat predictions
+  const mainPreds = predictions.filter(p => p.metadata?.isMain);
+  const otherPreds = predictions.filter(p => !p.metadata?.isMain);
+  return [...mainPreds, ...pickRandom(otherPreds, 4)];
 }
 
 async function generateF1Live() {
