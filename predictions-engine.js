@@ -356,49 +356,20 @@ async function generateFootballLive() {
     const season = getCurrentSeason();
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
 
-    // Fetch first date to test, then continue if it works
+    // Free plan doesn't support current season — fetch by date only
     const allMatches = [];
-    const testDate = dates[0];
-    console.log(`    Football: testing API with date=${testDate}, season=${season}...`);
-
-    const testRes = await fetch(`https://v3.football.api-sports.io/fixtures?date=${testDate}&season=${season}`, { headers });
-    const testData = await testRes.json();
-    console.log(`    Football API response: status=${testRes.status}, results=${testData.results}, errors=${JSON.stringify(testData.errors || {})}, response_length=${testData.response?.length || 0}`);
-
-    // If first call fails, try without season parameter
-    if (!testData.response || testData.response.length === 0) {
-      console.log('    Football: retrying without season parameter...');
-      const retryRes = await fetch(`https://v3.football.api-sports.io/fixtures?date=${testDate}`, { headers });
-      const retryData = await retryRes.json();
-      console.log(`    Football retry: results=${retryData.results}, errors=${JSON.stringify(retryData.errors || {})}, response_length=${retryData.response?.length || 0}`);
-
-      if (retryData.response && retryData.response.length > 0) {
-        console.log('    Football: works WITHOUT season! Fetching all dates...');
-        allMatches.push(...retryData.response);
-        // Fetch remaining dates without season
-        for (const date of dates.slice(1)) {
-          try {
-            const res = await fetch(`https://v3.football.api-sports.io/fixtures?date=${date}`, { headers });
-            const data = await res.json();
-            if (data.response) allMatches.push(...data.response);
-          } catch (e) {
-            console.error(`Football fetch error for ${date}:`, e.message);
-          }
+    for (const date of dates) {
+      try {
+        const res = await fetch(`https://v3.football.api-sports.io/fixtures?date=${date}`, { headers });
+        const data = await res.json();
+        if (data.response && Array.isArray(data.response)) {
+          allMatches.push(...data.response);
         }
-      }
-    } else {
-      allMatches.push(...testData.response);
-      // Fetch remaining dates with season
-      for (const date of dates.slice(1)) {
-        try {
-          const res = await fetch(`https://v3.football.api-sports.io/fixtures?date=${date}&season=${season}`, { headers });
-          const data = await res.json();
-          if (data.response) allMatches.push(...data.response);
-        } catch (e) {
-          console.error(`Football fetch error for ${date}:`, e.message);
-        }
+      } catch (e) {
+        console.error(`Football fetch error for ${date}:`, e.message);
       }
     }
+    console.log(`    Football: ${allMatches.length} total fixtures found across ${dates.length} days`);
 
     if (allMatches.length === 0) return predictions;
 
@@ -640,16 +611,28 @@ async function generateCombatLive() {
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    const res = await fetch('https://v1.mma.api-sports.io/fights?next=15', {
-      headers: { 'x-apisports-key': FOOTBALL_API_KEY }
-    });
-    const data = await res.json();
-    if (data.errors && Object.keys(data.errors).length > 0) {
-      console.error('MMA API errors:', JSON.stringify(data.errors));
+    // Free plan doesn't support 'next' — fetch by date for next 14 days
+    const headers2 = { 'x-apisports-key': FOOTBALL_API_KEY };
+    const mmaAllFights = [];
+    const mmaDates = getNextDays(13);
+    for (const date of mmaDates) {
+      try {
+        const res = await fetch(`https://v1.mma.api-sports.io/fights?date=${date}`, { headers: headers2 });
+        const data = await res.json();
+        if (data.response && Array.isArray(data.response)) {
+          mmaAllFights.push(...data.response);
+        }
+        if (data.errors && Object.keys(data.errors).length > 0) {
+          console.error('MMA API errors:', JSON.stringify(data.errors));
+          break; // Stop if endpoint doesn't work
+        }
+      } catch (e) {
+        console.error(`MMA fetch error for ${date}:`, e.message);
+      }
     }
 
-    if (data.response && Array.isArray(data.response)) {
-      for (const fight of data.response.slice(0, 5)) {
+    if (mmaAllFights.length > 0) {
+      for (const fight of mmaAllFights.slice(0, 5)) {
         if (!fight.fighters?.first?.name || !fight.fighters?.second?.name) continue;
         const f1 = fight.fighters.first.name;
         const f2 = fight.fighters.second.name;
@@ -693,16 +676,31 @@ async function generateF1Live() {
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    const res = await fetch('https://v1.formula-1.api-sports.io/races?next=8', {
+    // Free plan doesn't support 'next' — fetch current season races
+    const currentYear = new Date().getFullYear();
+    const f1Res = await fetch(`https://v1.formula-1.api-sports.io/races?season=${currentYear}`, {
       headers: { 'x-apisports-key': FOOTBALL_API_KEY }
     });
-    const data = await res.json();
-    if (data.errors && Object.keys(data.errors).length > 0) {
-      console.error('F1 API errors:', JSON.stringify(data.errors));
+    const f1Data = await f1Res.json();
+    if (f1Data.errors && Object.keys(f1Data.errors).length > 0) {
+      console.error('F1 API errors:', JSON.stringify(f1Data.errors));
+      // Try previous year if current fails
+      const retryRes = await fetch(`https://v1.formula-1.api-sports.io/races?season=${currentYear - 1}`, {
+        headers: { 'x-apisports-key': FOOTBALL_API_KEY }
+      });
+      const retryData = await retryRes.json();
+      if (retryData.errors && Object.keys(retryData.errors).length > 0) {
+        console.error('F1 retry errors:', JSON.stringify(retryData.errors));
+      }
     }
+    const f1Races = f1Data.response && Array.isArray(f1Data.response) ? f1Data.response : [];
 
-    if (data.response && Array.isArray(data.response)) {
-      for (const race of data.response.slice(0, 3)) {
+    // Filter only upcoming races
+    const now = new Date();
+    const upcomingRaces = f1Races.filter(r => r.date && new Date(r.date) > now);
+
+    if (upcomingRaces.length > 0) {
+      for (const race of upcomingRaces.slice(0, 3)) {
         const name = race.competition?.name || 'next race';
         const kickoff = race.date;
         const raceId = race.id;
@@ -881,7 +879,7 @@ async function generateFromNews(newsConfig) {
     } else {
       // Standard latest endpoint
       const lang = newsConfig.language || 'en';
-      url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=${lang}&category=${newsConfig.category}&removeduplicate=1&timeframe=24`;
+      url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=${lang}&category=${newsConfig.category}&removeduplicate=1`;
       if (newsConfig.q) url += `&q=${newsConfig.q}`;
       if (newsConfig.prioritydomain) url += `&prioritydomain=${newsConfig.prioritydomain}`;
       if (newsConfig.sentiment) url += `&sentiment=${newsConfig.sentiment}`;
