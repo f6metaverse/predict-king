@@ -536,13 +536,13 @@ async function initPredictions() {
     console.log('Cleanup note:', e.message);
   }
 
-  // Clean up unresolved combat predictions so the upgraded engine can regenerate with main events
+  // Clean up ALL unresolved combat predictions so the upgraded engine regenerates with main events
   try {
     const combatClean = await db.pool.query(
-      `DELETE FROM predictions WHERE resolved = FALSE AND category = 'combat' AND votes_a = 0 AND votes_b = 0`
+      `DELETE FROM predictions WHERE resolved = FALSE AND category = 'combat'`
     );
     if (combatClean.rowCount > 0) {
-      console.log(`Cleanup: removed ${combatClean.rowCount} zero-vote combat predictions for regeneration`);
+      console.log(`Cleanup: removed ${combatClean.rowCount} combat predictions for fresh regeneration with main events`);
     }
   } catch (e) {
     console.log('Combat cleanup note:', e.message);
