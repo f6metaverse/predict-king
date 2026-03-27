@@ -140,7 +140,7 @@ const NEWS_ROTATION = [
     { category: 'entertainment', q: 'movie%20OR%20Netflix%20OR%20Disney%20OR%20Marvel%20OR%20series%20OR%20HBO%20OR%20anime', predCat: 'cinema', emoji: '🎬', formats: 'entertainment' },
     { category: 'science', q: null, predCat: 'science', emoji: '🔬', formats: 'science' },
     { endpoint: 'crypto', coin: 'ada,avax,pepe,bnb,matic', predCat: 'crypto', emoji: '📰', formats: 'crypto' },
-    { category: 'sports', q: 'transfer%20OR%20injury%20OR%20record%20OR%20retire%20OR%20manager%20sacked%20OR%20VAR', predCat: 'sports_news', emoji: '⚽', formats: 'sports' },
+    { category: 'sports', qInTitle: 'transfer%20OR%20injury%20OR%20record%20OR%20retire%20OR%20sacked%20OR%20VAR', predCat: 'sports_news', emoji: '⚽', formats: 'sports' },
   ],
   // Cycle 3: Drama/Tech + Health + Lifestyle + Trending
   [
@@ -165,7 +165,7 @@ const NEWS_ROTATION = [
   ],
   // Cycle 6: Cinema + Drama + Science + Crime
   [
-    { category: 'entertainment', q: 'box%20office%20OR%20anime%20OR%20series%20OR%20Oscar%20OR%20Emmy', predCat: 'cinema', emoji: '🎬', formats: 'entertainment' },
+    { category: 'entertainment', qInTitle: 'box%20office%20OR%20anime%20OR%20Netflix%20OR%20Oscar%20OR%20Emmy', predCat: 'cinema', emoji: '🎬', formats: 'entertainment' },
     { category: 'technology', q: 'controversy%20OR%20scandal%20OR%20leaked%20OR%20hack%20OR%20ban', predCat: 'drama', emoji: '👀', formats: 'tech' },
     { category: 'science', q: 'space%20OR%20NASA%20OR%20discovery%20OR%20Mars%20OR%20quantum', predCat: 'science', emoji: '🔬', formats: 'science' },
     { category: 'crime', q: 'trial%20OR%20arrest%20OR%20fraud%20OR%20investigation', predCat: 'crime', emoji: '🚨', formats: 'crime' },
@@ -173,15 +173,15 @@ const NEWS_ROTATION = [
   // Cycle 7: Health + Trending + Crypto + Sports news
   [
     { category: 'health', q: 'fitness%20OR%20mental%20health%20OR%20diet%20OR%20wellness%20OR%20vaccine', predCat: 'health', emoji: '💪', formats: 'health' },
-    { category: 'top', q: null, predCat: 'trending', emoji: '🔥', formats: 'general', sentiment: 'positive' },
+    { category: 'top', q: null, predCat: 'trending', emoji: '🔥', formats: 'general', prioritydomain: 'top' },
     { endpoint: 'crypto', coin: 'btc,eth,doge,xrp', predCat: 'crypto', emoji: '₿', formats: 'crypto' },
-    { category: 'sports', q: 'Formula%201%20OR%20MotoGP%20OR%20Grand%20Prix%20OR%20NASCAR%20OR%20IndyCar', predCat: 'motorsport', emoji: '🏁', formats: 'motorsport' },
+    { category: 'sports', qInTitle: 'Formula%201%20OR%20MotoGP%20OR%20Grand%20Prix%20OR%20NASCAR%20OR%20IndyCar', predCat: 'motorsport', emoji: '🏁', formats: 'motorsport' },
   ],
   // Cycle 8: Environment + Lifestyle + Business + Tourism
   [
     { category: 'environment', q: 'climate%20OR%20pollution%20OR%20renewable%20OR%20wildfire%20OR%20flood', predCat: 'environment', emoji: '🌱', formats: 'environment' },
     { category: 'lifestyle', q: 'trend%20OR%20viral%20OR%20fashion%20OR%20wellness', predCat: 'lifestyle', emoji: '✨', formats: 'lifestyle' },
-    { category: 'business', q: 'Tesla%20OR%20Amazon%20OR%20Google%20OR%20Microsoft%20OR%20Apple', predCat: 'business', emoji: '💼', formats: 'business' },
+    { category: 'business', qInTitle: 'Tesla%20OR%20Amazon%20OR%20Google%20OR%20Microsoft%20OR%20Apple', predCat: 'business', emoji: '💼', formats: 'business' },
     { category: 'tourism', q: null, predCat: 'tourism', emoji: '✈️', formats: 'lifestyle' },
   ],
   // Cycle 9: French news + Drama + Food + World sentiment
@@ -189,7 +189,7 @@ const NEWS_ROTATION = [
     { category: 'top', q: null, predCat: 'trending', emoji: '🔥', formats: 'general', prioritydomain: 'top' },
     { category: 'technology', q: 'AI%20OR%20robot%20OR%20ChatGPT%20OR%20autonomous%20OR%20deepfake', predCat: 'drama', emoji: '🤖', formats: 'tech' },
     { category: 'food', q: 'restaurant%20OR%20chef%20OR%20recipe%20OR%20vegan%20OR%20fast%20food', predCat: 'food', emoji: '🍔', formats: 'lifestyle' },
-    { category: 'world', q: null, predCat: 'world', emoji: '🌍', formats: 'general', sentiment: 'negative' },
+    { category: 'world', q: null, predCat: 'world', emoji: '🌍', formats: 'general', prioritydomain: 'top' },
   ],
   // Cycle 10: EVENT HUNTER — specifically looks for upcoming events
   [
@@ -200,30 +200,30 @@ const NEWS_ROTATION = [
   ],
   // Cycle 11: TENNIS + GOLF + COMBAT + BUSINESS
   [
-    { category: 'sports', q: 'tennis%20OR%20Wimbledon%20OR%20Roland%20Garros%20OR%20US%20Open%20OR%20ATP%20OR%20WTA%20OR%20Grand%20Slam', predCat: 'tennis', emoji: '🎾', formats: 'tennis' },
-    { category: 'sports', q: 'golf%20OR%20Masters%20OR%20PGA%20OR%20Ryder%20Cup%20OR%20Open%20Championship', predCat: 'golf', emoji: '⛳', formats: 'sports' },
-    { category: 'sports', q: 'boxing%20OR%20UFC%20OR%20Canelo%20OR%20title%20fight%20OR%20knockout%20OR%20weigh-in', predCat: 'combat_news', emoji: '🥊', formats: 'combat_news' },
-    { category: 'business', q: 'IPO%20OR%20merger%20OR%20acquisition%20OR%20earnings%20OR%20launch', predCat: 'business', emoji: '💼', formats: 'business' },
+    { category: 'sports', qInTitle: 'tennis%20OR%20Wimbledon%20OR%20Roland%20Garros%20OR%20US%20Open%20OR%20ATP%20OR%20WTA%20OR%20Grand%20Slam', predCat: 'tennis', emoji: '🎾', formats: 'tennis' },
+    { category: 'sports', qInTitle: 'golf%20OR%20Masters%20OR%20PGA%20OR%20Ryder%20Cup%20OR%20Open%20Championship', predCat: 'golf', emoji: '⛳', formats: 'sports' },
+    { category: 'sports', qInTitle: 'boxing%20OR%20UFC%20OR%20Canelo%20OR%20title%20fight%20OR%20knockout%20OR%20weigh-in', predCat: 'combat_news', emoji: '🥊', formats: 'combat_news' },
+    { category: 'business', qInTitle: 'IPO%20OR%20merger%20OR%20acquisition%20OR%20earnings', predCat: 'business', emoji: '💼', formats: 'business' },
   ],
   // Cycle 12: FOOTBALL DRAMA + MOTORSPORT + CYCLING + CRYPTO
   [
-    { category: 'sports', q: 'Premier%20League%20OR%20Champions%20League%20OR%20La%20Liga%20OR%20Serie%20A%20OR%20Ligue%201', predCat: 'sports_news', emoji: '⚽', formats: 'sports' },
-    { category: 'sports', q: 'F1%20OR%20Formula%201%20OR%20MotoGP%20OR%20rally%20OR%20Le%20Mans%20OR%20WRC', predCat: 'motorsport', emoji: '🏎', formats: 'motorsport' },
-    { category: 'sports', q: 'Tour%20de%20France%20OR%20cycling%20OR%20Giro%20OR%20Vuelta%20OR%20peloton', predCat: 'cycling', emoji: '🚴', formats: 'sports' },
+    { category: 'sports', qInTitle: 'Premier%20League%20OR%20Champions%20League%20OR%20La%20Liga%20OR%20Serie%20A%20OR%20Ligue%201', predCat: 'sports_news', emoji: '⚽', formats: 'sports' },
+    { category: 'sports', qInTitle: 'F1%20OR%20Formula%201%20OR%20MotoGP%20OR%20rally%20OR%20Le%20Mans%20OR%20WRC', predCat: 'motorsport', emoji: '🏎', formats: 'motorsport' },
+    { category: 'sports', qInTitle: 'Tour%20de%20France%20OR%20cycling%20OR%20Giro%20OR%20Vuelta', predCat: 'cycling', emoji: '🚴', formats: 'sports' },
     { endpoint: 'crypto', coin: 'btc,eth,sol,doge', predCat: 'crypto', emoji: '₿', formats: 'crypto' },
   ],
   // Cycle 13: NBA/NFL NEWS + WRESTLING + ATHLETICS + WORLD
   [
-    { category: 'sports', q: 'NBA%20OR%20trade%20OR%20draft%20OR%20MVP%20OR%20All-Star%20OR%20playoffs', predCat: 'sports_news', emoji: '🏀', formats: 'sports' },
-    { category: 'sports', q: 'WWE%20OR%20WrestleMania%20OR%20Royal%20Rumble%20OR%20wrestling%20OR%20AEW', predCat: 'wrestling', emoji: '💪', formats: 'combat_news' },
-    { category: 'sports', q: 'athletics%20OR%20sprint%20OR%20marathon%20OR%20Olympic%20OR%20world%20record%20OR%20swimming', predCat: 'athletics', emoji: '🏃', formats: 'sports' },
+    { category: 'sports', qInTitle: 'NBA%20OR%20trade%20OR%20draft%20OR%20MVP%20OR%20All-Star%20OR%20playoffs', predCat: 'sports_news', emoji: '🏀', formats: 'sports' },
+    { category: 'sports', qInTitle: 'WWE%20OR%20WrestleMania%20OR%20Royal%20Rumble%20OR%20AEW', predCat: 'wrestling', emoji: '💪', formats: 'combat_news' },
+    { category: 'sports', qInTitle: 'Olympic%20OR%20marathon%20OR%20sprint%20OR%20world%20record%20OR%20swimming', predCat: 'athletics', emoji: '🏃', formats: 'sports' },
     { category: 'world', q: 'summit%20OR%20treaty%20OR%20sanctions%20OR%20crisis%20OR%20agreement', predCat: 'world', emoji: '🌍', formats: 'general', prioritydomain: 'top' },
   ],
   // Cycle 14: ESPORTS + COMBAT + TENNIS + TRENDING
   [
-    { category: 'sports', q: 'esports%20OR%20League%20of%20Legends%20OR%20Valorant%20OR%20Counter-Strike%20OR%20Worlds', predCat: 'esports', emoji: '🕹', formats: 'sports' },
-    { category: 'sports', q: 'UFC%20OR%20MMA%20OR%20fight%20card%20OR%20weigh-in%20OR%20title%20bout', predCat: 'combat_news', emoji: '🥊', formats: 'combat_news' },
-    { category: 'sports', q: 'tennis%20OR%20Australian%20Open%20OR%20final%20OR%20seed%20OR%20upset', predCat: 'tennis', emoji: '🎾', formats: 'tennis' },
+    { category: 'sports', qInTitle: 'esports%20OR%20League%20of%20Legends%20OR%20Valorant%20OR%20Counter-Strike%20OR%20Worlds', predCat: 'esports', emoji: '🕹', formats: 'sports' },
+    { category: 'sports', qInTitle: 'UFC%20OR%20MMA%20OR%20fight%20card%20OR%20weigh-in%20OR%20title%20bout', predCat: 'combat_news', emoji: '🥊', formats: 'combat_news' },
+    { category: 'sports', qInTitle: 'tennis%20OR%20Australian%20Open%20OR%20final%20OR%20seed%20OR%20upset', predCat: 'tennis', emoji: '🎾', formats: 'tennis' },
     { category: 'top', q: null, predCat: 'trending', emoji: '🔥', formats: 'general', prioritydomain: 'top' },
   ],
 ];
@@ -931,9 +931,10 @@ async function generateFromNews(newsConfig) {
       // Standard latest endpoint
       const lang = newsConfig.language || 'en';
       url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=${lang}&category=${newsConfig.category}&removeduplicate=1`;
-      if (newsConfig.q) url += `&q=${newsConfig.q}`;
+      if (newsConfig.qInTitle) url += `&qInTitle=${newsConfig.qInTitle}`;
+      else if (newsConfig.q) url += `&q=${newsConfig.q}`;
       if (newsConfig.prioritydomain) url += `&prioritydomain=${newsConfig.prioritydomain}`;
-      if (newsConfig.sentiment) url += `&sentiment=${newsConfig.sentiment}`;
+      // sentiment param not available on free plan
       if (newsConfig.country) url += `&country=${newsConfig.country}`;
     }
 
@@ -956,23 +957,7 @@ async function generateFromNews(newsConfig) {
       const title = article.title.slice(0, 80);
       const fmt = formatPool[Math.floor(Math.random() * formatPool.length)];
 
-      // Use article sentiment if available to pick better format
       let finalFmt = fmt;
-      if (article.sentiment === 'positive' && formatType !== 'crypto') {
-        const positiveFmts = [
-          { suffix: ' — Will this positive trend continue?', a: 'Just the beginning', b: 'Peak reached' },
-          { suffix: ' — Celebrate or stay cautious?', a: 'Celebrate!', b: 'Stay cautious' },
-          ...formatPool
-        ];
-        finalFmt = positiveFmts[Math.floor(Math.random() * positiveFmts.length)];
-      } else if (article.sentiment === 'negative' && formatType !== 'crypto') {
-        const negativeFmts = [
-          { suffix: ' — Will this get worse?', a: 'It gets worse', b: 'Worst is over' },
-          { suffix: ' — Recovery coming?', a: 'Bounce back soon', b: 'Long road ahead' },
-          ...formatPool
-        ];
-        finalFmt = negativeFmts[Math.floor(Math.random() * negativeFmts.length)];
-      }
 
       // Smart expiry: upcoming events stay longer, regular news = 12h
       const expiry = getSmartExpiry(article.title, article.description);
@@ -987,7 +972,7 @@ async function generateFromNews(newsConfig) {
           source: 'newsdata',
           type: isEvent ? 'event' : 'opinion',
           articleId: article.article_id,
-          sentiment: article.sentiment || null,
+          keywords: article.keywords || null,
           sourceUrl: article.link || null
         }
       });
