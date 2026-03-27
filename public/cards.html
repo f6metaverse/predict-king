@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Predict King — Hot Cards</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -33,18 +34,29 @@
       margin: 0 auto;
     }
 
+    /* === Animated gradient border keyframes === */
+    @keyframes borderGlow {
+      0% { border-color: rgba(168, 85, 247, 0.6); }
+      33% { border-color: rgba(234, 179, 8, 0.6); }
+      66% { border-color: rgba(168, 85, 247, 0.6); }
+      100% { border-color: rgba(234, 179, 8, 0.6); }
+    }
+
     /* === THE CARD — optimized for X/Twitter screenshots === */
     .prediction-card {
       background: linear-gradient(145deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
       border-radius: 20px;
       padding: 32px;
-      border: 1px solid rgba(168, 85, 247, 0.3);
+      border: 2px solid rgba(168, 85, 247, 0.3);
       position: relative;
       overflow: hidden;
       min-height: 280px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
+      animation: borderGlow 3s ease-in-out infinite;
+      border-top: 4px solid rgba(168, 85, 247, 0.6);
+      cursor: pointer;
     }
     .prediction-card::before {
       content: '';
@@ -56,6 +68,12 @@
       background: radial-gradient(circle, rgba(168, 85, 247, 0.08) 0%, transparent 60%);
       pointer-events: none;
     }
+
+    /* Category-specific top border colors */
+    .prediction-card.cat-sports { border-top-color: #22c55e; }
+    .prediction-card.cat-crypto { border-top-color: #eab308; }
+    .prediction-card.cat-entertainment { border-top-color: #d946ef; }
+    .prediction-card.cat-news { border-top-color: #64748b; }
 
     .card-badge {
       display: inline-flex;
@@ -156,16 +174,25 @@
     }
     .card-brand {
       display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+    }
+    .card-brand-main {
+      display: flex;
       align-items: center;
       gap: 8px;
-      font-size: 14px;
-      font-weight: 700;
+      font-size: 16px;
+      font-weight: 800;
       color: #a855f7;
     }
-    .card-brand img {
-      width: 24px;
-      height: 24px;
-      border-radius: 4px;
+    .card-brand-main .crown {
+      font-size: 22px;
+    }
+    .card-brand-handle {
+      font-size: 11px;
+      color: #888;
+      font-weight: 400;
     }
     .card-cta {
       font-size: 11px;
@@ -189,9 +216,37 @@
     .single-card .prediction-card {
       min-height: 320px;
       padding: 36px;
+      cursor: default;
     }
     .single-card .card-question {
       font-size: 26px;
+    }
+
+    /* Size modes */
+    .single-card.size-square {
+      max-width: 480px;
+    }
+    .single-card.size-square .prediction-card {
+      width: 480px;
+      height: 480px;
+    }
+    .single-card.size-wide {
+      max-width: 640px;
+    }
+    .single-card.size-wide .prediction-card {
+      width: 640px;
+      height: 360px;
+      padding: 24px 32px;
+    }
+    .single-card.size-wide .card-question {
+      font-size: 20px;
+      margin-bottom: 16px;
+    }
+    .single-card.size-wide .option-percent {
+      font-size: 22px;
+    }
+    .single-card.size-auto {
+      max-width: 480px;
     }
 
     .mode-toggle {
@@ -207,18 +262,131 @@
       cursor: pointer;
       font-size: 14px;
       margin: 0 5px;
+      transition: all 0.2s;
+    }
+    .mode-toggle button:hover {
+      background: rgba(168, 85, 247, 0.35);
     }
     .mode-toggle button.active {
       background: #a855f7;
       color: #fff;
     }
+
+    /* Action buttons row */
+    .card-actions {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    .card-actions button {
+      background: rgba(168, 85, 247, 0.2);
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      color: #c084fc;
+      padding: 10px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    .card-actions button:hover {
+      background: rgba(168, 85, 247, 0.35);
+    }
+    .card-actions button.btn-download {
+      background: rgba(34, 197, 94, 0.2);
+      border-color: rgba(34, 197, 94, 0.4);
+      color: #4ade80;
+    }
+    .card-actions button.btn-download:hover {
+      background: rgba(34, 197, 94, 0.35);
+    }
+    .card-actions button.btn-tweet {
+      background: rgba(59, 130, 246, 0.2);
+      border-color: rgba(59, 130, 246, 0.4);
+      color: #60a5fa;
+    }
+    .card-actions button.btn-tweet:hover {
+      background: rgba(59, 130, 246, 0.35);
+    }
+
+    /* Size toggle row */
+    .size-toggle {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .size-toggle button {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: #aaa;
+      padding: 6px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+    .size-toggle button:hover {
+      background: rgba(255,255,255,0.14);
+    }
+    .size-toggle button.active {
+      background: rgba(168, 85, 247, 0.3);
+      border-color: rgba(168, 85, 247, 0.5);
+      color: #c084fc;
+    }
+
+    /* Refresh button in toolbar */
+    .toolbar {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .toolbar button {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #aaa;
+      padding: 6px 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+    .toolbar button:hover {
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+    }
+
     .loading { text-align: center; color: #888; padding: 60px; font-size: 18px; }
+
+    /* Feedback toast */
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #22c55e;
+      color: #fff;
+      padding: 12px 28px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 14px;
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 9999;
+      pointer-events: none;
+    }
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
   </style>
 </head>
 <body>
   <div class="header">
     <h1>PREDICT KING — Hot Cards for X/Twitter</h1>
-    <p>Screenshot these cards and post them on X. Click a card for single-card view.</p>
+    <p>Click a card for single-card view with download and tweet options.</p>
   </div>
   <div class="mode-toggle">
     <button class="active" onclick="loadCards('hot')">Hottest</button>
@@ -227,9 +395,13 @@
     <button onclick="loadCards('crypto')">Crypto</button>
     <button onclick="loadCards('news')">News</button>
   </div>
+  <div class="toolbar">
+    <button onclick="refreshCards()">Refresh</button>
+  </div>
   <div id="container" class="cards-grid">
     <div class="loading">Loading predictions...</div>
   </div>
+  <div class="toast" id="toast"></div>
 
   <script>
     const catLabels = {
@@ -246,7 +418,16 @@
     };
 
     const sportCats = ['football','nba','combat','f1','nfl','hockey','rugby','motorsport','tennis','golf','combat_news','wrestling','cycling','athletics','esports','sports_news'];
-    const newsCats = ['musique','gaming','cinema','drama','politics','world','science','health','trending','crime','environment','business','lifestyle','food','education','tourism'];
+    const entertainmentCats = ['musique','gaming','cinema','drama','lifestyle','food','education','tourism'];
+    const newsCats = ['politics','world','science','health','trending','crime','environment','business'];
+
+    function getCategoryClass(category) {
+      if (sportCats.includes(category)) return 'cat-sports';
+      if (category === 'crypto') return 'cat-crypto';
+      if (entertainmentCats.includes(category)) return 'cat-entertainment';
+      if (newsCats.includes(category)) return 'cat-news';
+      return '';
+    }
 
     function getTimeLeft(expiresAt) {
       const diff = new Date(expiresAt) - new Date();
@@ -258,6 +439,13 @@
       return mins + 'm left';
     }
 
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
     function renderCard(p, single = false) {
       const total = p.votesA + p.votesB;
       const pctA = total > 0 ? Math.round((p.votesA / total) * 100) : 50;
@@ -265,9 +453,11 @@
       const isHot = total >= 5;
       const label = catLabels[p.category] || p.category.toUpperCase();
       const timeLeft = getTimeLeft(p.expiresAt);
+      const catClass = getCategoryClass(p.category);
+      const clickAttr = single ? '' : `onclick="showSingle('${p.id}')"`;
 
       return `
-        <div class="prediction-card" onclick="showSingle('${p.id}')">
+        <div class="prediction-card ${catClass}" ${clickAttr} data-id="${p.id}">
           <div>
             <span class="card-badge ${isHot ? 'hot' : ''}">${isHot ? '🔥 HOT — ' : ''}${label}</span>
             <div class="card-question">${p.question}</div>
@@ -286,20 +476,34 @@
             <div class="card-bar"><div class="card-bar-fill" style="width:${pctA}%"></div></div>
             <div class="card-footer">
               <div class="card-votes"><strong>${total}</strong> votes${timeLeft !== 'Expired' ? ' — <span class="card-expiry">' + timeLeft + '</span>' : ''}</div>
-              <div class="card-brand">👑 PREDICT KING</div>
+              <div class="card-brand">
+                <div class="card-brand-main"><span class="crown">👑</span> PREDICT KING</div>
+                <div class="card-brand-handle">@PredictKingApp</div>
+              </div>
             </div>
-            <div class="card-cta">@PredictKingApp — Play on Telegram</div>
+            <div class="card-cta">t.me/PredictKingAppBot — Play on Telegram</div>
           </div>
         </div>
       `;
     }
 
     let allPredictions = [];
+    let currentMode = 'hot';
+    let currentSizeMode = 'auto';
 
     async function loadCards(mode) {
+      currentMode = mode;
       // Update active button
       document.querySelectorAll('.mode-toggle button').forEach(b => b.classList.remove('active'));
-      event?.target?.classList?.add('active');
+      if (event && event.target && event.target.tagName === 'BUTTON') {
+        event.target.classList.add('active');
+      } else {
+        // Fallback: highlight based on mode
+        const labels = { hot: 'Hottest', latest: 'Latest', sport: 'Sport', crypto: 'Crypto', news: 'News' };
+        document.querySelectorAll('.mode-toggle button').forEach(b => {
+          if (b.textContent === labels[mode]) b.classList.add('active');
+        });
+      }
 
       const container = document.getElementById('container');
       container.innerHTML = '<div class="loading">Loading...</div>';
@@ -323,7 +527,7 @@
             filtered = allPredictions.filter(p => p.category === 'crypto').slice(0, 12);
             break;
           case 'news':
-            filtered = allPredictions.filter(p => newsCats.includes(p.category)).slice(0, 12);
+            filtered = allPredictions.filter(p => [...newsCats, ...entertainmentCats].includes(p.category)).slice(0, 12);
             break;
           default:
             filtered = allPredictions.slice(0, 12);
@@ -338,13 +542,73 @@
       }
     }
 
+    function refreshCards() {
+      loadCards(currentMode);
+      showToast('Predictions refreshed!');
+    }
+
     function showSingle(id) {
       const p = allPredictions.find(x => x.id === id);
       if (!p) return;
       const container = document.getElementById('container');
-      container.className = 'single-card';
+      container.className = 'single-card size-' + currentSizeMode;
       container.innerHTML = renderCard(p, true) +
-        '<div style="text-align:center;margin-top:20px"><button onclick="loadCards(\'hot\')" style="background:rgba(168,85,247,0.2);border:1px solid rgba(168,85,247,0.4);color:#c084fc;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:14px">← Back to all cards</button></div>';
+        `<div class="size-toggle">
+          <button class="${currentSizeMode === 'auto' ? 'active' : ''}" onclick="changeSizeMode('auto', '${p.id}')">Auto</button>
+          <button class="${currentSizeMode === 'square' ? 'active' : ''}" onclick="changeSizeMode('square', '${p.id}')">Square 1:1</button>
+          <button class="${currentSizeMode === 'wide' ? 'active' : ''}" onclick="changeSizeMode('wide', '${p.id}')">Wide 16:9</button>
+        </div>
+        <div class="card-actions">
+          <button class="btn-download" onclick="downloadCard()">Download PNG</button>
+          <button class="btn-tweet" onclick="copyTweet('${p.id}')">Copy Tweet</button>
+          <button onclick="loadCards('${currentMode}')">Back to all cards</button>
+        </div>`;
+    }
+
+    function changeSizeMode(mode, id) {
+      currentSizeMode = mode;
+      showSingle(id);
+    }
+
+    function downloadCard() {
+      const card = document.querySelector('.prediction-card');
+      if (!card) return;
+      // Temporarily remove animation so the capture is clean
+      card.style.animation = 'none';
+      html2canvas(card, {
+        backgroundColor: null,
+        scale: 2,
+        useCORS: true,
+        logging: false
+      }).then(canvas => {
+        card.style.animation = '';
+        const link = document.createElement('a');
+        link.download = 'predict-king-card.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        showToast('Card downloaded!');
+      }).catch(() => {
+        card.style.animation = '';
+        showToast('Download failed');
+      });
+    }
+
+    function copyTweet(id) {
+      const p = allPredictions.find(x => x.id === id);
+      if (!p) return;
+      const tweet = `${p.question}?\n\n${p.optionA} vs ${p.optionB} — Vote now!\n\n\u{1F451} @PredictKingApp\nt.me/PredictKingAppBot`;
+      navigator.clipboard.writeText(tweet).then(() => {
+        showToast('Copied!');
+      }).catch(() => {
+        // Fallback
+        const ta = document.createElement('textarea');
+        ta.value = tweet;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast('Copied!');
+      });
     }
 
     // Load on start

@@ -152,6 +152,58 @@ app.get('/api/predictions', async (req, res) => {
   }
 });
 
+// Generate tweet suggestions from active predictions (public — no auth needed)
+app.get('/api/tweets', async (req, res) => {
+  try {
+    const predictions = await db.getActivePredictions();
+    // Limit to 20 most recent
+    const recent = predictions.slice(0, 20);
+
+    const hashtagMap = {
+      football: '#Football #Soccer',
+      nba: '#NBA #Basketball',
+      combat: '#UFC #MMA',
+      combat_news: '#UFC #MMA',
+      f1: '#F1 #Racing',
+      motorsport: '#F1 #Racing',
+      nfl: '#NFL #Football',
+      hockey: '#NHL #Hockey',
+      rugby: '#Rugby',
+      crypto: '#Crypto #Bitcoin',
+      musique: '#Music',
+      gaming: '#Gaming',
+      esports: '#Gaming',
+      cinema: '#Movies',
+      politics: '#Politics',
+      business: '#Business #Stocks'
+    };
+
+    const suffix = '\n\n👑 @PredictKingApp\nt.me/PredictKingAppBot';
+
+    const result = recent.map(p => {
+      const catHashtags = (hashtagMap[p.category] || '#Predictions') + ' #PredictKing';
+
+      const debateText = `${p.question} 🤔\n\n${p.optionA} or ${p.optionB}? Drop your pick 👇\n\n${catHashtags}${suffix}`;
+      const boldText = `${p.optionA} is the answer 🔥\n\nWhat do you think?\n\n${catHashtags}${suffix}`;
+
+      return {
+        predictionId: p.id,
+        category: p.category,
+        question: p.question,
+        tweets: [
+          { type: 'debate', text: debateText.slice(0, 280) },
+          { type: 'bold_take', text: boldText.slice(0, 280) }
+        ]
+      };
+    });
+
+    res.json(result);
+  } catch (e) {
+    console.error('Tweets API error:', e.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Vote on a prediction (requires Telegram auth + rate limited)
 app.post('/api/vote', requireTelegramUser, rateLimit(30, 60000), async (req, res) => {
   const { predictionId, choice } = req.body;

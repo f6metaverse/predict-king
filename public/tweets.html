@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Predict King — Tweet Generator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a0f;
+      color: #e2e8f0;
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 32px 20px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+
+    header h1 {
+      font-size: 28px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #a855f7, #fbbf24);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+    }
+
+    header p {
+      color: #94a3b8;
+      font-size: 14px;
+      max-width: 500px;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
+
+    /* Filters */
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 28px;
+    }
+
+    .filter-btn {
+      background: #1a1a2e;
+      border: 1px solid #2a2a4a;
+      color: #94a3b8;
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .filter-btn:hover {
+      border-color: #a855f7;
+      color: #e2e8f0;
+    }
+
+    .filter-btn.active {
+      background: #a855f7;
+      border-color: #a855f7;
+      color: #fff;
+    }
+
+    /* Stats bar */
+    .stats-bar {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-bottom: 24px;
+      font-size: 13px;
+      color: #64748b;
+    }
+
+    .stats-bar span {
+      color: #fbbf24;
+      font-weight: 600;
+    }
+
+    /* Loading */
+    .loading {
+      text-align: center;
+      padding: 60px 20px;
+      color: #64748b;
+    }
+
+    .loading .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid #1a1a2e;
+      border-top-color: #a855f7;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Error */
+    .error {
+      text-align: center;
+      padding: 40px 20px;
+      color: #ef4444;
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.2);
+      border-radius: 12px;
+    }
+
+    /* Prediction group */
+    .prediction-group {
+      margin-bottom: 32px;
+    }
+
+    .prediction-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #e2e8f0;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .prediction-meta {
+      font-size: 12px;
+      color: #64748b;
+      margin-bottom: 12px;
+    }
+
+    .category-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: rgba(168,85,247,0.15);
+      color: #a855f7;
+      border: 1px solid rgba(168,85,247,0.3);
+    }
+
+    .category-badge.crypto { background: rgba(251,191,36,0.12); color: #fbbf24; border-color: rgba(251,191,36,0.3); }
+    .category-badge.sport { background: rgba(34,197,94,0.12); color: #22c55e; border-color: rgba(34,197,94,0.3); }
+    .category-badge.news { background: rgba(59,130,246,0.12); color: #3b82f6; border-color: rgba(59,130,246,0.3); }
+    .category-badge.entertainment { background: rgba(236,72,153,0.12); color: #ec4899; border-color: rgba(236,72,153,0.3); }
+
+    /* Tweet card */
+    .tweet-card {
+      background: #12121f;
+      border: 1px solid #1e1e3a;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 10px;
+      transition: border-color 0.2s;
+    }
+
+    .tweet-card:hover {
+      border-color: #a855f740;
+    }
+
+    .tweet-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .tweet-type {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .tweet-type.debate { color: #fbbf24; }
+    .tweet-type.bold { color: #a855f7; }
+    .tweet-type.stats { color: #22c55e; }
+
+    .char-count {
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .char-count.ok { color: #64748b; }
+    .char-count.warn { color: #fbbf24; }
+    .char-count.over { color: #ef4444; }
+
+    .tweet-body {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #cbd5e1;
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin-bottom: 12px;
+      background: #0a0a14;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #1a1a2e;
+    }
+
+    .copy-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #a855f7;
+      color: #fff;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: #9333ea;
+      transform: translateY(-1px);
+    }
+
+    .copy-btn.copied {
+      background: #22c55e;
+    }
+
+    /* Empty state */
+    .empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: #64748b;
+    }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .container { padding: 20px 14px; }
+      header h1 { font-size: 22px; }
+      .tweet-body { font-size: 13px; padding: 10px; }
+      .prediction-title { font-size: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>PREDICT KING — Tweet Generator 🐦</h1>
+      <p>Copy-paste these tweets to X. Mix debate + bold takes for max engagement.</p>
+    </header>
+
+    <div class="filters" id="filters"></div>
+    <div class="stats-bar" id="statsBar"></div>
+    <div id="content">
+      <div class="loading">
+        <div class="spinner"></div>
+        Loading predictions...
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const HASHTAGS = {
+      football: '#Football #Soccer #Predictions',
+      nba: '#NBA #Basketball #Predictions',
+      combat: '#UFC #MMA #Boxing #Predictions',
+      combat_news: '#UFC #MMA #Boxing #Predictions',
+      f1: '#F1 #Racing #Predictions',
+      motorsport: '#F1 #Racing #Predictions',
+      nfl: '#NFL #Football #Predictions',
+      hockey: '#NHL #Hockey #Predictions',
+      rugby: '#Rugby #Predictions',
+      crypto: '#Crypto #Bitcoin #Predictions',
+      musique: '#Music #Predictions',
+      gaming: '#Gaming #Esports #Predictions',
+      esports: '#Gaming #Esports #Predictions',
+      cinema: '#Movies #Cinema #Predictions',
+      drama: '#Drama #Celebrity #Predictions',
+      politics: '#Politics #Predictions',
+      world: '#News #Trending #Predictions',
+      trending: '#News #Trending #Predictions',
+      science: '#Science #Predictions',
+      health: '#Health #Predictions',
+      business: '#Business #Stocks #Predictions',
+    };
+
+    const CATEGORY_GROUPS = {
+      sport: ['football', 'nba', 'combat', 'combat_news', 'f1', 'motorsport', 'nfl', 'hockey', 'rugby'],
+      crypto: ['crypto'],
+      news: ['politics', 'world', 'trending', 'science', 'health', 'business'],
+      entertainment: ['cinema', 'drama', 'musique', 'gaming', 'esports'],
+    };
+
+    function getCategoryGroup(cat) {
+      const c = (cat || '').toLowerCase();
+      for (const [group, list] of Object.entries(CATEGORY_GROUPS)) {
+        if (list.includes(c)) return group;
+      }
+      return 'other';
+    }
+
+    function getHashtags(cat) {
+      const c = (cat || '').toLowerCase();
+      return HASHTAGS[c] || '#Predictions #PredictKing';
+    }
+
+    const CTA = 'Play free → t.me/PredictKingAppBot';
+
+    function generateTweets(pred) {
+      const tweets = [];
+      const q = pred.question || pred.title || '';
+      const optA = pred.option_a || 'Option A';
+      const optB = pred.option_b || 'Option B';
+      const cat = pred.category || '';
+      const tags = getHashtags(cat);
+      const votesA = pred.votes_a || 0;
+      const votesB = pred.votes_b || 0;
+      const totalVotes = votesA + votesB;
+
+      // 1) Debate tweet
+      const debate = `${q}\n\nDrop your pick 👇\n\n${tags} @PredictKingApp\n\n${CTA}`;
+      tweets.push({ type: 'debate', label: '💬 Debate', text: debate });
+
+      // 2) Bold take tweet
+      const bold = `${optA} taking this one 🔥\n\n${q}\n\nWhat do you think? Vote now on @PredictKingApp\n\n${tags}\n\n${CTA}`;
+      tweets.push({ type: 'bold', label: '🎯 Bold Take', text: bold });
+
+      // 3) Stats tweet (only if votes > 0)
+      if (totalVotes > 0) {
+        const pctA = Math.round((votesA / totalVotes) * 100);
+        const pctB = 100 - pctA;
+        const stats = `${pctA}% say ${optA} vs ${pctB}% say ${optB} — Who's right? 🤔\n\n${q}\n\n${tags} @PredictKingApp\n\n${CTA}`;
+        tweets.push({ type: 'stats', label: '📊 Stats', text: stats });
+      }
+
+      return tweets;
+    }
+
+    function charClass(len) {
+      if (len > 280) return 'over';
+      if (len > 250) return 'warn';
+      return 'ok';
+    }
+
+    async function copyText(text, btn) {
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      const orig = btn.innerHTML;
+      btn.innerHTML = '✅ Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied'); }, 1500);
+    }
+
+    let allPredictions = [];
+    let activeFilter = 'all';
+
+    function renderFilters() {
+      const el = document.getElementById('filters');
+      const groups = ['all', 'sport', 'crypto', 'news', 'entertainment'];
+      el.innerHTML = groups.map(g =>
+        `<button class="filter-btn ${g === activeFilter ? 'active' : ''}" data-filter="${g}">${g.charAt(0).toUpperCase() + g.slice(1)}</button>`
+      ).join('');
+      el.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          activeFilter = btn.dataset.filter;
+          renderFilters();
+          renderTweets();
+        });
+      });
+    }
+
+    function renderTweets() {
+      const content = document.getElementById('content');
+      const statsBar = document.getElementById('statsBar');
+
+      const filtered = activeFilter === 'all'
+        ? allPredictions
+        : allPredictions.filter(p => getCategoryGroup(p.category) === activeFilter);
+
+      if (filtered.length === 0) {
+        content.innerHTML = '<div class="empty">No predictions found for this category.</div>';
+        statsBar.innerHTML = '';
+        return;
+      }
+
+      let totalTweets = 0;
+      let html = '';
+
+      filtered.forEach(pred => {
+        const tweets = generateTweets(pred);
+        totalTweets += tweets.length;
+        const group = getCategoryGroup(pred.category);
+        const cat = (pred.category || 'unknown').toLowerCase();
+
+        html += `<div class="prediction-group">`;
+        html += `<div class="prediction-title">
+          <span class="category-badge ${group}">${cat}</span>
+          ${pred.question || pred.title || 'Untitled'}
+        </div>`;
+        html += `<div class="prediction-meta">${pred.option_a || '?'} vs ${pred.option_b || '?'}`;
+        const totalVotes = (pred.votes_a || 0) + (pred.votes_b || 0);
+        if (totalVotes > 0) html += ` &middot; ${totalVotes} vote${totalVotes !== 1 ? 's' : ''}`;
+        html += `</div>`;
+
+        tweets.forEach((tw, i) => {
+          const len = tw.text.length;
+          const cc = charClass(len);
+          const id = `tweet-${pred.id}-${i}`;
+          html += `<div class="tweet-card">
+            <div class="tweet-header">
+              <span class="tweet-type ${tw.type}">${tw.label}</span>
+              <span class="char-count ${cc}">${len}/280</span>
+            </div>
+            <div class="tweet-body" id="${id}">${escapeHtml(tw.text)}</div>
+            <button class="copy-btn" onclick="copyText(document.getElementById('${id}').textContent, this)">📋 Copy Tweet</button>
+          </div>`;
+        });
+
+        html += `</div>`;
+      });
+
+      statsBar.innerHTML = `<div><span>${filtered.length}</span> predictions</div><div><span>${totalTweets}</span> tweets ready</div>`;
+      content.innerHTML = html;
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    async function init() {
+      renderFilters();
+      try {
+        const res = await fetch('/api/predictions');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        allPredictions = Array.isArray(data) ? data : (data.predictions || data.data || []);
+        // Only keep active/open predictions
+        allPredictions = allPredictions.filter(p => {
+          const s = (p.status || '').toLowerCase();
+          return !s || s === 'active' || s === 'open' || s === 'pending';
+        });
+        renderTweets();
+      } catch (err) {
+        document.getElementById('content').innerHTML = `<div class="error">Failed to load predictions: ${escapeHtml(err.message)}<br><br>Make sure the API is running at /api/predictions</div>`;
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
