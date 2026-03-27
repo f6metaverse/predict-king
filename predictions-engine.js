@@ -59,7 +59,7 @@ function expiresInHours(hours) {
 // Min active predictions per category
 const MIN_SLOTS = {
   // Sport (API-Sports) — upgraded generators produce more quality predictions
-  crypto: 4,
+  crypto: 8,
   football: 8,
   nba: 6,
   combat: 5,
@@ -1088,53 +1088,218 @@ const SPORT_GENERATORS = {
 async function generateCryptoLive() {
   const predictions = [];
   try {
-    const url = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,dogecoin,ripple,cardano,avalanche-2,pepe&vs_currencies=usd&include_24hr_change=true';
+    // Fetch 15 top coins with full market data
+    const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=15&sparkline=false&price_change_percentage=1h,24h,7d';
     const headers = COINGECKO_API_KEY ? { 'x-cg-demo-api-key': COINGECKO_API_KEY } : {};
     const res = await fetch(url, { headers });
-    const data = await res.json();
+    const marketData = await res.json();
 
-    const coins = [
-      { id: 'bitcoin', name: 'Bitcoin', symbol: 'BTC', emoji: '₿' },
-      { id: 'ethereum', name: 'Ethereum', symbol: 'ETH', emoji: '💎' },
-      { id: 'solana', name: 'Solana', symbol: 'SOL', emoji: '⚡' },
-      { id: 'dogecoin', name: 'Dogecoin', symbol: 'DOGE', emoji: '🐕' },
-      { id: 'ripple', name: 'XRP', symbol: 'XRP', emoji: '💧' },
-      { id: 'cardano', name: 'Cardano', symbol: 'ADA', emoji: '🔷' },
-      { id: 'avalanche-2', name: 'Avalanche', symbol: 'AVAX', emoji: '🔺' },
-      { id: 'pepe', name: 'PEPE', symbol: 'PEPE', emoji: '🐸' }
-    ];
+    if (!Array.isArray(marketData) || marketData.length === 0) return predictions;
 
-    for (const coin of coins) {
-      if (!data[coin.id]) continue;
-      const price = data[coin.id].usd;
-      const change = data[coin.id].usd_24h_change;
+    // === COIN TIERS — Kings always show up ===
+    const TIER_1 = ['bitcoin', 'ethereum']; // Always 3 predictions each
+    const TIER_2 = ['solana', 'ripple', 'dogecoin', 'cardano', 'tron']; // 1-2 predictions
+    const TIER_3_IDS = ['avalanche-2', 'chainlink', 'polkadot', 'pepe', 'shiba-inu', 'sui', 'near', 'litecoin']; // 1 prediction if interesting
 
-      let target;
-      if (price > 10000) target = Math.round(price / 1000) * 1000 + (change > 0 ? 5000 : -2000);
-      else if (price > 100) target = Math.round(price / 100) * 100 + (change > 0 ? 200 : -100);
-      else if (price > 1) target = Math.round(price * 1.1);
-      else target = (price * 1.15).toFixed(4);
+    const EMOJI_MAP = {
+      bitcoin: '₿', ethereum: '💎', solana: '⚡', dogecoin: '🐕', ripple: '💧',
+      cardano: '🔷', tron: '🔮', 'avalanche-2': '🔺', chainlink: '🔗', polkadot: '⚪',
+      pepe: '🐸', 'shiba-inu': '🐶', sui: '🌊', near: '🌐', litecoin: '🪙'
+    };
 
-      const targetStr = typeof target === 'number' && target > 1 ? target.toLocaleString() : target;
-      const priceStr = price > 1 ? Math.round(price).toLocaleString() : price.toFixed(4);
-
-      const templates = [
-        { question: `${coin.symbol} above $${targetStr} in the next 8h?`, optionA: 'YES', optionB: 'NO' },
-        { question: `${coin.symbol} going up or down in the next few hours?`, optionA: 'Up', optionB: 'Down' },
-        { question: `Is $${priceStr} a good entry for ${coin.symbol}?`, optionA: 'Buy now', optionB: 'Wait' },
-      ];
-
-      predictions.push({
-        ...templates[Math.floor(Math.random() * templates.length)],
-        category: 'crypto', emoji: coin.emoji,
-        expiresAt: expiresInHours(8),
-        metadata: { coinId: coin.id, symbol: coin.symbol, priceAtCreation: price, target: parseFloat(target) }
-      });
+    function formatPrice(price) {
+      if (price >= 10000) return '$' + Math.round(price).toLocaleString();
+      if (price >= 1) return '$' + price.toFixed(2);
+      if (price >= 0.001) return '$' + price.toFixed(4);
+      return '$' + price.toFixed(8);
     }
+
+    function getTarget(price, change24h, direction) {
+      // Dynamic targets based on current momentum
+      const momentum = Math.abs(change24h || 0);
+      const volatilityMult = momentum > 10 ? 0.08 : momentum > 5 ? 0.05 : 0.03;
+      if (direction === 'up') return price * (1 + volatilityMult);
+      if (direction === 'down') return price * (1 - volatilityMult);
+      // Round number target (psychological level)
+      if (price > 10000) return Math.ceil(price / 5000) * 5000;
+      if (price > 1000) return Math.ceil(price / 500) * 500;
+      if (price > 100) return Math.ceil(price / 50) * 50;
+      if (price > 10) return Math.ceil(price / 5) * 5;
+      if (price > 1) return Math.ceil(price);
+      return price * 1.1;
+    }
+
+    for (const coin of marketData) {
+      if (!coin.current_price) continue;
+
+      const id = coin.id;
+      const symbol = (coin.symbol || '').toUpperCase();
+      const name = coin.name || symbol;
+      const price = coin.current_price;
+      const change1h = coin.price_change_percentage_1h_in_currency || 0;
+      const change24h = coin.price_change_percentage_24h_in_currency || coin.price_change_percentage_24h || 0;
+      const change7d = coin.price_change_percentage_7d_in_currency || 0;
+      const ath = coin.ath || 0;
+      const athChangePercent = coin.ath_change_percentage || 0;
+      const emoji = EMOJI_MAP[id] || '🪙';
+      const priceStr = formatPrice(price);
+      const athStr = formatPrice(ath);
+      const isNearATH = athChangePercent > -10; // Within 10% of ATH
+      const isPumping = change24h > 5;
+      const isDumping = change24h < -5;
+      const isVolatile = Math.abs(change24h) > 8;
+
+      const tier = TIER_1.includes(id) ? 1 : TIER_2.includes(id) ? 2 : TIER_3_IDS.includes(id) ? 3 : 0;
+      if (tier === 0) continue; // Skip coins not in our tiers
+
+      const baseMeta = { coinId: id, symbol, priceAtCreation: price, change24h, change7d, ath };
+
+      // === TIER 1 (BTC, ETH): 3 predictions always ===
+      if (tier === 1) {
+        const roundTarget = getTarget(price, change24h, 'up');
+        const roundTargetStr = formatPrice(roundTarget);
+
+        // 1) Price target
+        predictions.push({
+          question: `${emoji} ${symbol} at ${priceStr} — Will it hit ${roundTargetStr} in the next 8h?`,
+          optionA: 'YES', optionB: 'NO',
+          category: 'crypto', emoji,
+          expiresAt: expiresInHours(8),
+          metadata: { ...baseMeta, predType: 'price_target', target: roundTarget }
+        });
+
+        // 2) Direction based on momentum
+        if (isPumping) {
+          predictions.push({
+            question: `${emoji} ${symbol} is UP ${change24h.toFixed(1)}% today — Pump continues or pullback incoming?`,
+            optionA: 'Keeps pumping', optionB: 'Pullback',
+            category: 'crypto', emoji,
+            expiresAt: expiresInHours(8),
+            metadata: { ...baseMeta, predType: 'momentum' }
+          });
+        } else if (isDumping) {
+          predictions.push({
+            question: `${emoji} ${symbol} is DOWN ${Math.abs(change24h).toFixed(1)}% today — Dead cat bounce or more pain?`,
+            optionA: 'Bounce', optionB: 'More pain',
+            category: 'crypto', emoji,
+            expiresAt: expiresInHours(8),
+            metadata: { ...baseMeta, predType: 'momentum' }
+          });
+        } else {
+          predictions.push({
+            question: `${emoji} ${symbol} at ${priceStr} — Next big move?`,
+            optionA: 'Pump incoming', optionB: 'Dump incoming',
+            category: 'crypto', emoji,
+            expiresAt: expiresInHours(8),
+            metadata: { ...baseMeta, predType: 'direction' }
+          });
+        }
+
+        // 3) ATH / Sentiment / Weekly
+        if (isNearATH) {
+          predictions.push({
+            question: `${emoji} ${symbol} is ${Math.abs(athChangePercent).toFixed(0)}% from ATH (${athStr}) — New ATH this week?`,
+            optionA: 'New ATH', optionB: 'Not yet',
+            category: 'crypto', emoji,
+            expiresAt: expiresInHours(48),
+            metadata: { ...baseMeta, predType: 'ath' }
+          });
+        } else {
+          const weekDir = change7d > 0 ? 'up' : 'down';
+          predictions.push({
+            question: `${emoji} ${symbol} is ${weekDir} ${Math.abs(change7d).toFixed(1)}% this week — Green or red next 24h?`,
+            optionA: 'Green', optionB: 'Red',
+            category: 'crypto', emoji,
+            expiresAt: expiresInHours(24),
+            metadata: { ...baseMeta, predType: 'weekly_trend' }
+          });
+        }
+      }
+
+      // === TIER 2: 1-2 predictions ===
+      if (tier === 2) {
+        // Always: direction question
+        if (isPumping) {
+          predictions.push({
+            question: `${emoji} ${symbol} pumping +${change24h.toFixed(1)}% — FOMO or too late?`,
+            optionA: 'Still early', optionB: 'Too late',
+            category: 'crypto', emoji,
+            expiresAt: expiresInHours(8),
+            metadata: { ...baseMeta, predType: 'fomo' }
+          });
+        } else if (isDumping) {
+          predictions.push({
+            question: `${emoji} ${symbol} bleeding -${Math.abs(change24h).toFixed(1)}% — Buy the dip or stay away?`,
+            optionA: 'Buy the dip', optionB: 'Stay away',
+            category: 'crypto', emoji,
+            expiresAt: expiresInHours(8),
+            metadata: { ...baseMeta, predType: 'dip' }
+          });
+        } else {
+          predictions.push({
+            question: `${emoji} ${symbol} at ${priceStr} — Up or down in the next 8h?`,
+            optionA: 'Up', optionB: 'Down',
+            category: 'crypto', emoji,
+            expiresAt: expiresInHours(8),
+            metadata: { ...baseMeta, predType: 'direction' }
+          });
+        }
+
+        // If volatile or near ATH: bonus prediction
+        if (isVolatile || isNearATH) {
+          const target = getTarget(price, change24h, isPumping ? 'up' : 'down');
+          predictions.push({
+            question: `${emoji} ${name} at ${priceStr} — Will it hit ${formatPrice(target)} today?`,
+            optionA: 'YES', optionB: 'NO',
+            category: 'crypto', emoji,
+            expiresAt: expiresInHours(12),
+            metadata: { ...baseMeta, predType: 'price_target', target }
+          });
+        }
+      }
+
+      // === TIER 3: 1 prediction only if interesting (volatile/pumping/dumping) ===
+      if (tier === 3 && (isVolatile || isPumping || isDumping)) {
+        if (isPumping) {
+          predictions.push({
+            question: `${emoji} ${symbol} is ripping +${change24h.toFixed(1)}% — Moon or rug?`,
+            optionA: 'To the moon', optionB: 'Rug pull',
+            category: 'crypto', emoji,
+            expiresAt: expiresInHours(8),
+            metadata: { ...baseMeta, predType: 'hype' }
+          });
+        } else if (isDumping) {
+          predictions.push({
+            question: `${emoji} ${symbol} crashed -${Math.abs(change24h).toFixed(1)}% — Recovery or RIP?`,
+            optionA: 'Recovery', optionB: 'RIP',
+            category: 'crypto', emoji,
+            expiresAt: expiresInHours(8),
+            metadata: { ...baseMeta, predType: 'crash' }
+          });
+        }
+      }
+    }
+
+    // === MARKET SENTIMENT: Global question ===
+    const btc = marketData.find(c => c.id === 'bitcoin');
+    if (btc) {
+      const btcChange = btc.price_change_percentage_24h || 0;
+      if (Math.abs(btcChange) > 3) {
+        predictions.push({
+          question: `🌍 Crypto market ${btcChange > 0 ? 'pumping' : 'dumping'} — Alt season incoming or BTC dominance?`,
+          optionA: 'Alt season', optionB: 'BTC dominance',
+          category: 'crypto', emoji: '🌍',
+          expiresAt: expiresInHours(12),
+          metadata: { predType: 'market_sentiment', btcChange }
+        });
+      }
+    }
+
   } catch (e) {
     console.error('Crypto API error:', e.message);
   }
-  return pickRandom(predictions, 4);
+  // Return all — BTC/ETH always included, others based on action
+  return predictions;
 }
 
 // ============================================
