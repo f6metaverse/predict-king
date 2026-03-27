@@ -412,7 +412,7 @@ async function generateFootballLive() {
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    const dates = getNextDays(6); // 7 days ahead
+    const dates = getNextDays(3); // 4 days ahead (saves API quota: 4 calls instead of 7)
     const season = getCurrentSeason();
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
 
@@ -511,7 +511,7 @@ async function generateNBALive() {
     if (!FOOTBALL_API_KEY) return predictions;
 
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
-    const dates = getNextDays(6); // 7 days ahead
+    const dates = getNextDays(3); // 4 days ahead (saves API quota)
 
     // Big market teams for prioritization
     const NBA_BIG_MARKET = ['Los Angeles Lakers', 'Golden State Warriors', 'Boston Celtics', 'New York Knicks', 'Brooklyn Nets', 'Miami Heat', 'Philadelphia 76ers', 'Dallas Mavericks', 'Milwaukee Bucks', 'Phoenix Suns', 'Denver Nuggets', 'Chicago Bulls', 'Cleveland Cavaliers', 'Minnesota Timberwolves', 'Oklahoma City Thunder', 'Sacramento Kings'];
@@ -603,7 +603,7 @@ async function generateNFLLive() {
     if (!FOOTBALL_API_KEY) return predictions;
 
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
-    const dates = getNextDays(6);
+    const dates = getNextDays(3); // 4 days ahead (saves API quota)
 
     const allGames = [];
     for (const date of dates) {
@@ -674,7 +674,7 @@ async function generateHockeyLive() {
     if (!FOOTBALL_API_KEY) return predictions;
 
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
-    const dates = getNextDays(6);
+    const dates = getNextDays(3); // 4 days ahead (saves API quota)
 
     const allGames = [];
     for (const date of dates) {
@@ -984,7 +984,7 @@ async function generateRugbyLive() {
     if (!FOOTBALL_API_KEY) return predictions;
 
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
-    const dates = getNextDays(6);
+    const dates = getNextDays(3); // 4 days ahead (saves API quota)
 
     // Top rugby leagues to prioritize (already good sorting)
     const TOP_RUGBY_LEAGUES = [
@@ -1590,10 +1590,16 @@ async function smartGenerate(forceWeekly = false) {
 
   const isWeeklyDay = (dayOfWeek === 1 || dayOfWeek === 3); // Monday or Wednesday
   const isMorning = (hour >= 6 && hour <= 10);
-  const isEmergency = realSportPreds < 10; // Need at least 10 REAL sport predictions
+  const isEmergency = realSportPreds < 5; // Emergency only if critically low (was 10, caused quota burn)
 
-  if (forceWeekly || (isWeeklyDay && isMorning) || isEmergency) {
+  // Rate limit: max 1 weekly sports fetch per 12h to protect API quota
+  const lastWeeklyFetch = global._lastWeeklyFetch || 0;
+  const hoursSinceLastFetch = (Date.now() - lastWeeklyFetch) / 3600000;
+  const canFetch = hoursSinceLastFetch > 12;
+
+  if ((forceWeekly || (isWeeklyDay && isMorning) || isEmergency) && canFetch) {
     if (isEmergency) console.log(`  EMERGENCY: only ${realSportPreds} real sport predictions (${totalSportPreds} total including old static)`);
+    global._lastWeeklyFetch = Date.now();
     totalGenerated += await weeklySportsFetch(active);
   } else {
     console.log(`  Sports: ${realSportPreds} real sport predictions active, skipping API (next fetch: Mon/Wed morning)`);
