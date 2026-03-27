@@ -786,6 +786,18 @@ async function generateRugbyLive() {
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
     const dates = getNextDays(6);
 
+    // Top rugby leagues to prioritize
+    const TOP_RUGBY_LEAGUES = [
+      16,  // Top 14 (France)
+      48,  // Premiership (England)
+      76,  // United Rugby Championship (Pro14)
+      71,  // Super Rugby (Southern hemisphere)
+      44,  // Major League Rugby (USA)
+      27,  // Top League (Japan)
+      12,  // Greene King IPA Championship (England 2nd)
+      13,  // Premiership Rugby
+    ];
+
     const allGames = [];
     for (const date of dates) {
       try {
@@ -802,7 +814,12 @@ async function generateRugbyLive() {
       }
     }
 
-    for (const game of allGames.slice(0, 4)) {
+    // Prioritize top leagues first
+    const topGames = allGames.filter(g => TOP_RUGBY_LEAGUES.includes(g.league?.id));
+    const otherGames = allGames.filter(g => !TOP_RUGBY_LEAGUES.includes(g.league?.id));
+    const sortedGames = [...topGames, ...otherGames];
+
+    for (const game of sortedGames.slice(0, 4)) {
       const home = game.teams.home.name;
       const away = game.teams.away.name;
       const kickoff = game.date || game.time;
