@@ -1089,10 +1089,11 @@ async function generateCryptoLive() {
   const predictions = [];
   try {
     // Fetch 15 top coins with full market data
-    const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=15&sparkline=false&price_change_percentage=1h,24h,7d';
+    const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=30&sparkline=false&price_change_percentage=1h%2C24h%2C7d';
     const headers = COINGECKO_API_KEY ? { 'x-cg-demo-api-key': COINGECKO_API_KEY } : {};
     const res = await fetch(url, { headers });
     const marketData = await res.json();
+    console.log(`  Crypto markets API: ${Array.isArray(marketData) ? marketData.length + ' coins fetched' : 'ERROR: ' + JSON.stringify(marketData).slice(0, 200)}`);
 
     if (!Array.isArray(marketData) || marketData.length === 0) return predictions;
 
@@ -1296,9 +1297,10 @@ async function generateCryptoLive() {
     }
 
   } catch (e) {
-    console.error('Crypto API error:', e.message);
+    console.error('Crypto API error:', e.message, e.stack);
   }
   // Return all — BTC/ETH always included, others based on action
+  console.log(`  Crypto live engine: ${predictions.length} predictions generated`);
   return predictions;
 }
 
