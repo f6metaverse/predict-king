@@ -58,15 +58,15 @@ function expiresInHours(hours) {
 
 // Min active predictions per category
 const MIN_SLOTS = {
-  // Sport (API-Sports)
-  crypto: 3,
-  football: 3,
-  nba: 2,
+  // Sport (API-Sports) — upgraded generators produce more quality predictions
+  crypto: 4,
+  football: 8,
+  nba: 6,
   combat: 5,
-  f1: 2,
-  nfl: 1,
-  hockey: 2,
-  rugby: 1,
+  f1: 4,
+  nfl: 4,
+  hockey: 6,
+  rugby: 3,
   // News-powered (NewsData.io)
   musique: 2,
   gaming: 2,
@@ -344,34 +344,41 @@ const NEWS_FORMATS_BY_TYPE = {
 // Only called on schedule days (Mon/Wed) or emergency
 // ============================================
 
-// Top football leagues to prioritize
-const TOP_FOOTBALL_LEAGUES = [
-  // Top domestic leagues
+// Football league tiers for prioritization
+// TIER 1: Elite competitions — always show first, get 2 predictions each
+const FOOTBALL_TIER_1 = [
+  2,    // Champions League
+  3,    // Europa League
+  1,    // World Cup
+  4,    // Euro Championship
   39,   // Premier League (England)
   140,  // La Liga (Spain)
-  61,   // Ligue 1 (France)
   135,  // Serie A (Italy)
   78,   // Bundesliga (Germany)
-  253,  // MLS (USA)
+  61,   // Ligue 1 (France)
+];
+
+// TIER 2: Strong leagues/tournaments — fill after tier 1
+const FOOTBALL_TIER_2 = [
+  13,   // Copa Libertadores
+  5,    // UEFA Nations League
+  9,    // Copa America
+  6,    // Africa Cup of Nations
+  88,   // Eredivisie (Netherlands)
   262,  // Liga MX (Mexico)
   71,   // Serie A (Brazil)
-  128,  // Liga Profesional (Argentina)
   94,   // Primeira Liga (Portugal)
-  88,   // Eredivisie (Netherlands)
   144,  // Jupiler Pro League (Belgium)
   203,  // Super Lig (Turkey)
   307,  // Saudi Pro League
-  // UEFA club competitions
-  2,    // Champions League
-  3,    // Europa League
+  253,  // MLS (USA)
+];
+
+// TIER 3: Everything else that's still a known league
+const FOOTBALL_TIER_3 = [
   848,  // Conference League
   531,  // UEFA Super Cup
-  // International
-  1,    // World Cup
-  4,    // Euro Championship
-  5,    // UEFA Nations League
-  6,    // Africa Cup of Nations
-  9,    // Copa America
+  128,  // Liga Profesional (Argentina)
   10,   // Friendlies (international)
   37,   // World Cup Qualification Playoffs
   29,   // World Cup Qualification Africa
@@ -383,14 +390,22 @@ const TOP_FOOTBALL_LEAGUES = [
   960,  // Euro Qualification
   1222, // FIFA Series
   1207, // CONCACAF Series
-  // South American club
-  13,   // Copa Libertadores
   11,   // Copa Sudamericana
-  // Other continental
   12,   // CAF Champions League
   17,   // AFC Champions League
   15,   // FIFA Club World Cup
 ];
+
+// Combined list for filtering known leagues
+const TOP_FOOTBALL_LEAGUES = [...FOOTBALL_TIER_1, ...FOOTBALL_TIER_2, ...FOOTBALL_TIER_3];
+
+// Returns 0 for tier 1, 1 for tier 2, 2 for tier 3, 3 for unknown
+function getFootballTier(leagueId) {
+  if (FOOTBALL_TIER_1.includes(leagueId)) return 0;
+  if (FOOTBALL_TIER_2.includes(leagueId)) return 1;
+  if (FOOTBALL_TIER_3.includes(leagueId)) return 2;
+  return 3;
+}
 
 async function generateFootballLive() {
   const predictions = [];
@@ -418,23 +433,23 @@ async function generateFootballLive() {
 
     if (allMatches.length === 0) return predictions;
 
-    // Prioritize top leagues, then fill with others
-    const topMatches = allMatches.filter(m => TOP_FOOTBALL_LEAGUES.includes(m.league?.id));
-    const otherMatches = allMatches.filter(m => !TOP_FOOTBALL_LEAGUES.includes(m.league?.id));
-    const sortedMatches = [...topMatches, ...otherMatches];
-
     // Only upcoming matches (not started/finished)
-    const upcoming = sortedMatches.filter(m =>
+    const upcoming = allMatches.filter(m =>
       m.fixture?.status?.short === 'NS' || m.fixture?.status?.short === 'TBD'
     );
 
-    for (const match of upcoming.slice(0, 12)) {
+    // Sort by tier: TIER 1 first, then TIER 2, then TIER 3, then unknown
+    upcoming.sort((a, b) => getFootballTier(a.league?.id) - getFootballTier(b.league?.id));
+
+    // Take top 8 matches after tier sorting
+    for (const match of upcoming.slice(0, 8)) {
       const home = match.teams.home.name;
       const away = match.teams.away.name;
       const league = match.league.name;
       const kickoff = match.fixture.date;
       const fixtureId = match.fixture.id;
       const dateStr = formatMatchDate(kickoff);
+      const tier = getFootballTier(match.league?.id);
 
       const baseMetadata = {
         fixtureId,
@@ -462,16 +477,32 @@ async function generateFootballLive() {
         },
       ];
 
-      predictions.push({
-        ...templates[Math.floor(Math.random() * templates.length)],
-        category: 'football', emoji: '⚽',
-        expiresAt: expiresAtKickoff(kickoff)
-      });
+      if (tier === 0) {
+        // TIER 1: generate 2 predictions (winner + over/under goals)
+        predictions.push({
+          ...templates[0],
+          category: 'football', emoji: '⚽',
+          expiresAt: expiresAtKickoff(kickoff)
+        });
+        predictions.push({
+          ...templates[1],
+          category: 'football', emoji: '⚽',
+          expiresAt: expiresAtKickoff(kickoff)
+        });
+      } else {
+        // TIER 2/3/unknown: generate 1 random prediction
+        predictions.push({
+          ...templates[Math.floor(Math.random() * templates.length)],
+          category: 'football', emoji: '⚽',
+          expiresAt: expiresAtKickoff(kickoff)
+        });
+      }
     }
   } catch (e) {
     console.error('Football API error:', e.message);
   }
-  return pickRandom(predictions, 5);
+  // Return ALL predictions (no pickRandom) — up to ~12
+  return predictions;
 }
 
 async function generateNBALive() {
@@ -481,6 +512,9 @@ async function generateNBALive() {
 
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
     const dates = getNextDays(6); // 7 days ahead
+
+    // Big market teams for prioritization
+    const NBA_BIG_MARKET = ['Los Angeles Lakers', 'Golden State Warriors', 'Boston Celtics', 'New York Knicks', 'Brooklyn Nets', 'Miami Heat', 'Philadelphia 76ers', 'Dallas Mavericks', 'Milwaukee Bucks', 'Phoenix Suns', 'Denver Nuggets', 'Chicago Bulls', 'Cleveland Cavaliers', 'Minnesota Timberwolves', 'Oklahoma City Thunder', 'Sacramento Kings'];
 
     // Fetch next 7 days of games
     const allGames = [];
@@ -500,12 +534,20 @@ async function generateNBALive() {
       }
     }
 
+    // Sort by big market matchups: 2 big market teams > 1 > 0
+    allGames.sort((a, b) => {
+      const aScore = (NBA_BIG_MARKET.includes(a.teams?.home?.name) ? 1 : 0) + (NBA_BIG_MARKET.includes(a.teams?.away?.name) ? 1 : 0);
+      const bScore = (NBA_BIG_MARKET.includes(b.teams?.home?.name) ? 1 : 0) + (NBA_BIG_MARKET.includes(b.teams?.away?.name) ? 1 : 0);
+      return bScore - aScore; // Higher score first
+    });
+
+    // Take top 8 games after sorting
     for (const game of allGames.slice(0, 8)) {
       const home = game.teams.home.name;
       const away = game.teams.away.name;
       const kickoff = game.date || game.time;
       const gameId = game.id;
-      const dateStr = kickoff ? formatMatchDate(kickoff) : datesToFetch[0];
+      const dateStr = kickoff ? formatMatchDate(kickoff) : dates[0];
 
       const baseMetadata = {
         gameId,
@@ -528,16 +570,31 @@ async function generateNBALive() {
         },
       ];
 
-      predictions.push({
-        ...templates[Math.floor(Math.random() * templates.length)],
-        category: 'nba', emoji: '🏀',
-        expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(48)
-      });
+      const isBigMatchup = NBA_BIG_MARKET.includes(home) && NBA_BIG_MARKET.includes(away);
+
+      if (isBigMatchup) {
+        // Big matchup (2 big market teams): generate both predictions
+        for (const tmpl of templates) {
+          predictions.push({
+            ...tmpl,
+            category: 'nba', emoji: '🏀',
+            expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(48)
+          });
+        }
+      } else {
+        // Other games: generate 1 random prediction
+        predictions.push({
+          ...templates[Math.floor(Math.random() * templates.length)],
+          category: 'nba', emoji: '🏀',
+          expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(48)
+        });
+      }
     }
   } catch (e) {
     console.error('NBA API error:', e.message);
   }
-  return pickRandom(predictions, 4);
+  // Return ALL predictions (no pickRandom) — up to ~12
+  return predictions;
 }
 
 async function generateNFLLive() {
@@ -565,27 +622,49 @@ async function generateNFLLive() {
       }
     }
 
-    for (const game of allGames.slice(0, 4)) {
+    // Take up to 8 games
+    for (let i = 0; i < Math.min(allGames.length, 8); i++) {
+      const game = allGames[i];
       const home = game.teams.home.name;
       const away = game.teams.away.name;
       const kickoff = game.date || game.time;
       const gameId = game.id;
       const dateStr = kickoff ? formatMatchDate(kickoff) : 'This week';
 
-      predictions.push({
+      const baseMetadata = {
+        gameId, kickoff, apiType: 'american-football',
+        homeTeam: home, awayTeam: away
+      };
+
+      const winnerPred = {
         question: `🏈 NFL: ${home} vs ${away} — Who wins? (${dateStr})`,
         optionA: home, optionB: away,
         category: 'nfl', emoji: '🏈',
         expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(72),
-        metadata: {
-          gameId, kickoff, apiType: 'american-football',
-          homeTeam: home, awayTeam: away, predType: 'winner'
-        }
-      });
+        metadata: { ...baseMetadata, predType: 'winner' }
+      };
+
+      const overUnderPred = {
+        question: `🏈 ${home} vs ${away}: Over 45 combined points? (${dateStr})`,
+        optionA: 'YES', optionB: 'NO',
+        category: 'nfl', emoji: '🏈',
+        expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(72),
+        metadata: { ...baseMetadata, predType: 'over_points', threshold: 45 }
+      };
+
+      if (i < 2) {
+        // First 2 games (primetime/important): generate both templates
+        predictions.push(winnerPred);
+        predictions.push(overUnderPred);
+      } else {
+        // Remaining games: 1 random template
+        predictions.push(Math.random() < 0.5 ? winnerPred : overUnderPred);
+      }
     }
   } catch (e) {
     console.error('NFL API error:', e.message);
   }
+  // Return ALL predictions (no pickRandom) — up to ~10
   return predictions;
 }
 
@@ -603,52 +682,72 @@ async function generateHockeyLive() {
         const res = await fetch(`https://v1.hockey.api-sports.io/games?date=${date}`, { headers });
         const data = await res.json();
         if (data.response) {
-          const nhlGames = data.response.filter(g =>
+          const hockeyGames = data.response.filter(g =>
             (g.league?.name === 'NHL' || g.league?.name === 'KHL') &&
             (g.status?.short === 'NS' || !g.status?.short)
           );
-          allGames.push(...nhlGames);
+          allGames.push(...hockeyGames);
         }
       } catch (e) {
         console.error(`Hockey fetch error for ${date}:`, e.message);
       }
     }
 
-    for (const game of allGames.slice(0, 5)) {
+    // Sort: NHL first (way more popular), KHL second
+    const nhlGames = allGames.filter(g => g.league?.name === 'NHL');
+    const khlGames = allGames.filter(g => g.league?.name === 'KHL');
+
+    // Take up to 6 NHL + 2 KHL = 8 games max
+    const selectedGames = [
+      ...nhlGames.slice(0, 6),
+      ...khlGames.slice(0, 2)
+    ];
+
+    for (let i = 0; i < selectedGames.length; i++) {
+      const game = selectedGames[i];
       const home = game.teams.home.name;
       const away = game.teams.away.name;
       const kickoff = game.date || game.time;
       const gameId = game.id;
+      const leagueName = game.league?.name || 'Hockey';
       const dateStr = kickoff ? formatMatchDate(kickoff) : 'This week';
+      const isNHL = game.league?.name === 'NHL';
 
       const baseMetadata = {
         gameId, kickoff, apiType: 'hockey',
-        homeTeam: home, awayTeam: away
+        homeTeam: home, awayTeam: away, league: leagueName
       };
 
-      const templates = [
-        {
-          question: `🏒 NHL: ${home} vs ${away} — Who wins? (${dateStr})`,
-          optionA: home, optionB: away,
-          metadata: { ...baseMetadata, predType: 'winner' }
-        },
-        {
-          question: `🏒 ${home} vs ${away}: Over 5.5 total goals? (${dateStr})`,
-          optionA: 'YES', optionB: 'NO',
-          metadata: { ...baseMetadata, predType: 'over_goals', threshold: 5.5 }
-        },
-      ];
-
-      predictions.push({
-        ...templates[Math.floor(Math.random() * templates.length)],
+      const winnerPred = {
+        question: `🏒 ${leagueName}: ${home} vs ${away} — Who wins? (${dateStr})`,
+        optionA: home, optionB: away,
         category: 'hockey', emoji: '🏒',
-        expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(48)
-      });
+        expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(48),
+        metadata: { ...baseMetadata, predType: 'winner' }
+      };
+
+      const overGoalsPred = {
+        question: `🏒 ${leagueName}: ${home} vs ${away} — Over 5.5 total goals? (${dateStr})`,
+        optionA: 'YES', optionB: 'NO',
+        category: 'hockey', emoji: '🏒',
+        expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(48),
+        metadata: { ...baseMetadata, predType: 'over_goals', threshold: 5.5 }
+      };
+
+      // First 3 NHL games: generate BOTH prediction types
+      if (isNHL && i < 3) {
+        predictions.push(winnerPred);
+        predictions.push(overGoalsPred);
+      } else {
+        // Rest: 1 random template
+        predictions.push(Math.random() < 0.5 ? winnerPred : overGoalsPred);
+      }
     }
   } catch (e) {
     console.error('Hockey API error:', e.message);
   }
-  return pickRandom(predictions, 3);
+  // Return ALL predictions (no pickRandom) — up to ~11 predictions
+  return predictions;
 }
 
 async function generateCombatLive() {
@@ -767,13 +866,51 @@ async function generateCombatLive() {
   return [...mainPreds, ...pickRandom(otherPreds, 4)];
 }
 
+// Hardcoded 2026 F1 calendar (API doesn't provide race dates on free plan)
+const F1_CALENDAR_2026 = [
+  { name: 'Australian Grand Prix', month: 3, day: 14 },
+  { name: 'Chinese Grand Prix', month: 3, day: 28 },
+  { name: 'Japanese Grand Prix', month: 4, day: 11 },
+  { name: 'Bahrain Grand Prix', month: 4, day: 18 },
+  { name: 'Saudi Arabian Grand Prix', month: 5, day: 2 },
+  { name: 'Miami Grand Prix', month: 5, day: 16 },
+  { name: 'Emilia Romagna Grand Prix', month: 5, day: 30 },
+  { name: 'Monaco Grand Prix', month: 6, day: 6 },
+  { name: 'Spanish Grand Prix', month: 6, day: 20 },
+  { name: 'Canadian Grand Prix', month: 7, day: 4 },
+  { name: 'Austrian Grand Prix', month: 7, day: 18 },
+  { name: 'British Grand Prix', month: 8, day: 1 },
+  { name: 'Belgian Grand Prix', month: 8, day: 29 },
+  { name: 'Dutch Grand Prix', month: 9, day: 5 },
+  { name: 'Italian Grand Prix', month: 9, day: 12 },
+  { name: 'Azerbaijan Grand Prix', month: 9, day: 26 },
+  { name: 'Singapore Grand Prix', month: 10, day: 10 },
+  { name: 'United States Grand Prix', month: 10, day: 24 },
+  { name: 'Mexico City Grand Prix', month: 10, day: 31 },
+  { name: 'Brazilian Grand Prix', month: 11, day: 14 },
+  { name: 'Las Vegas Grand Prix', month: 11, day: 21 },
+  { name: 'Qatar Grand Prix', month: 12, day: 5 },
+  { name: 'Abu Dhabi Grand Prix', month: 12, day: 12 },
+];
+
 async function generateF1Live() {
   const predictions = [];
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    // Free plan: races endpoint requires season (blocked), next (blocked)
-    // Use competitions endpoint (works!) to get GP names, then create predictions
+    // Find the next 2 upcoming GPs from the hardcoded calendar
+    const now = new Date();
+    const upcomingRaces = F1_CALENDAR_2026.filter(race => {
+      const raceDate = new Date(Date.UTC(2026, race.month - 1, race.day, 13, 0)); // Race at 13:00 UTC
+      return raceDate > now;
+    }).slice(0, 2); // Next 2 races
+
+    if (upcomingRaces.length === 0) {
+      console.log('    F1: No upcoming races left in 2026 calendar');
+      return predictions;
+    }
+
+    // Fetch competitions from API to validate GP names exist
     const headers3 = { 'x-apisports-key': FOOTBALL_API_KEY };
     const compRes = await fetch('https://v1.formula-1.api-sports.io/competitions', { headers: headers3 });
     const compData = await compRes.json();
@@ -784,39 +921,50 @@ async function generateF1Live() {
     }
 
     const competitions = compData.response && Array.isArray(compData.response) ? compData.response : [];
-    console.log(`    F1: ${competitions.length} competitions found`);
+    const apiGPNames = competitions.map(c => c.name).filter(n => n && n.includes('Grand Prix'));
+    console.log(`    F1: ${apiGPNames.length} GPs from API, ${upcomingRaces.length} upcoming from calendar`);
 
-    if (competitions.length === 0) return predictions;
+    // Fuzzy match: extract location keyword from calendar name and find it in API names
+    function findAPIMatch(calendarName) {
+      const keyword = calendarName.replace(' Grand Prix', '').toLowerCase();
+      return apiGPNames.find(apiName => apiName.toLowerCase().includes(keyword));
+    }
 
-    // Pick a few random upcoming GPs to create predictions about
-    const gpNames = competitions.map(c => c.name).filter(n => n && n.includes('Grand Prix'));
-    const selectedGPs = pickRandom(gpNames, 4);
+    // All available F1 prediction templates
+    const f1Templates = [
+      { q: (gp) => `🏎 F1 ${gp}: Will the polesitter win the race?`, optA: 'YES', optB: 'NO', predType: 'pole_wins' },
+      { q: (gp) => `🏎 F1 ${gp}: Safety Car during the race?`, optA: 'YES', optB: 'NO', predType: 'safety_car' },
+      { q: (gp) => `🏎 F1 ${gp}: Any DNF in the top 5?`, optA: 'YES', optB: 'NO', predType: 'dnf' },
+      { q: (gp) => `🏎 F1 ${gp}: Rain during the race?`, optA: 'YES', optB: 'NO', predType: 'rain' },
+      { q: (gp) => `🏎 F1 ${gp}: Fastest lap by the winner?`, optA: 'YES', optB: 'NO', predType: 'fastest_lap' },
+      { q: (gp) => `🏎 F1 ${gp}: Over 1 pit stop for the winner?`, optA: 'Multi-stop', optB: '1-stop', predType: 'pit_strategy' },
+      { q: (gp) => `🏎 F1 ${gp}: First lap incident?`, optA: 'YES', optB: 'NO', predType: 'first_lap' },
+      { q: (gp) => `🏎 F1 ${gp}: Podium surprise (non-top 3 team)?`, optA: 'YES', optB: 'NO', predType: 'surprise_podium' },
+    ];
 
-    for (const gpName of selectedGPs) {
+    for (let raceIdx = 0; raceIdx < upcomingRaces.length; raceIdx++) {
+      const race = upcomingRaces[raceIdx];
+      // Use the API-matched name if found, otherwise use calendar name
+      const gpName = findAPIMatch(race.name) || race.name;
+
+      // Set expiry to race day (Sunday) at 13:00 UTC (typical race start)
+      const raceDate = new Date(Date.UTC(2026, race.month - 1, race.day, 13, 0));
+      const expiry = raceDate.toISOString();
+
       const baseMetadata = {
         apiType: 'formula-1',
-        raceName: gpName
+        raceName: gpName,
+        raceDate: expiry
       };
 
-      // Expire in 7 days (we don't have exact race dates from competitions endpoint)
-      const expiry = expiresInHours(168);
+      // Next GP (index 0): 4 diverse predictions; GP after that (index 1): 2 predictions
+      const templateCount = raceIdx === 0 ? 4 : 2;
+      const picked = pickRandom(f1Templates, templateCount);
 
-      const f1Templates = [
-        { question: `🏎 F1 ${gpName}: Will the polesitter win the race?`, optionA: 'YES', optionB: 'NO', predType: 'pole_wins' },
-        { question: `🏎 F1 ${gpName}: Safety Car during the race?`, optionA: 'YES', optionB: 'NO', predType: 'safety_car' },
-        { question: `🏎 F1 ${gpName}: Any DNF in the top 5?`, optionA: 'YES', optionB: 'NO', predType: 'dnf' },
-        { question: `🏎 F1 ${gpName}: Rain during the race?`, optionA: 'YES', optionB: 'NO', predType: 'rain' },
-        { question: `🏎 F1 ${gpName}: Fastest lap by the winner?`, optionA: 'YES', optionB: 'NO', predType: 'fastest_lap' },
-        { question: `🏎 F1 ${gpName}: Over 1 pit stop for the winner?`, optionA: 'Multi-stop', optionB: '1-stop', predType: 'pit_strategy' },
-        { question: `🏎 F1 ${gpName}: First lap incident?`, optionA: 'YES', optionB: 'NO', predType: 'first_lap' },
-        { question: `🏎 F1 ${gpName}: Podium surprise (non-top 3 team)?`, optionA: 'YES', optionB: 'NO', predType: 'surprise_podium' },
-      ];
-
-      const picked = pickRandom(f1Templates, 2);
       for (const tmpl of picked) {
         predictions.push({
-          question: tmpl.question,
-          optionA: tmpl.optionA, optionB: tmpl.optionB,
+          question: tmpl.q(gpName),
+          optionA: tmpl.optA, optionB: tmpl.optB,
           category: 'f1', emoji: '🏎',
           expiresAt: expiry,
           metadata: { ...baseMetadata, predType: tmpl.predType }
@@ -826,7 +974,8 @@ async function generateF1Live() {
   } catch (e) {
     console.error('F1 API error:', e.message);
   }
-  return pickRandom(predictions, 4);
+  // Return ALL predictions (no pickRandom) — up to 6 predictions
+  return predictions;
 }
 
 async function generateRugbyLive() {
@@ -837,7 +986,7 @@ async function generateRugbyLive() {
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
     const dates = getNextDays(6);
 
-    // Top rugby leagues to prioritize
+    // Top rugby leagues to prioritize (already good sorting)
     const TOP_RUGBY_LEAGUES = [
       16,  // Top 14 (France)
       48,  // Premiership (England)
@@ -870,28 +1019,55 @@ async function generateRugbyLive() {
     const otherGames = allGames.filter(g => !TOP_RUGBY_LEAGUES.includes(g.league?.id));
     const sortedGames = [...topGames, ...otherGames];
 
-    for (const game of sortedGames.slice(0, 4)) {
+    // Take top 6 games after sorting by league priority
+    const selectedGames = sortedGames.slice(0, 6);
+
+    for (let i = 0; i < selectedGames.length; i++) {
+      const game = selectedGames[i];
       const home = game.teams.home.name;
       const away = game.teams.away.name;
       const kickoff = game.date || game.time;
       const gameId = game.id;
       const dateStr = kickoff ? formatMatchDate(kickoff) : 'This week';
+      const expiry = kickoff ? expiresAtKickoff(kickoff) : expiresInHours(48);
 
-      predictions.push({
+      const baseMetadata = {
+        gameId, kickoff, apiType: 'rugby',
+        homeTeam: home, awayTeam: away
+      };
+
+      // Winner template
+      const winnerPred = {
         question: `🏉 Rugby: ${home} vs ${away} — Who wins? (${dateStr})`,
         optionA: home, optionB: away,
         category: 'rugby', emoji: '🏉',
-        expiresAt: kickoff ? expiresAtKickoff(kickoff) : expiresInHours(48),
-        metadata: {
-          gameId, kickoff, apiType: 'rugby',
-          homeTeam: home, awayTeam: away, predType: 'winner'
-        }
-      });
+        expiresAt: expiry,
+        metadata: { ...baseMetadata, predType: 'winner' }
+      };
+
+      // Margin template
+      const marginPred = {
+        question: `🏉 ${home} vs ${away}: Winning margin over 10 points? (${dateStr})`,
+        optionA: 'YES', optionB: 'NO',
+        category: 'rugby', emoji: '🏉',
+        expiresAt: expiry,
+        metadata: { ...baseMetadata, predType: 'margin' }
+      };
+
+      // Top 2 games (best leagues): both templates
+      if (i < 2) {
+        predictions.push(winnerPred);
+        predictions.push(marginPred);
+      } else {
+        // Rest: 1 random template
+        predictions.push(Math.random() < 0.5 ? winnerPred : marginPred);
+      }
     }
   } catch (e) {
     console.error('Rugby API error:', e.message);
   }
-  return pickRandom(predictions, 2);
+  // Return ALL predictions (no pickRandom) — up to ~8 predictions
+  return predictions;
 }
 
 // Map sport names to their generators
@@ -967,6 +1143,13 @@ async function generateCryptoLive() {
 // Filters: removeduplicate, prioritydomain, sentiment, timeframe
 // ============================================
 
+function smartTruncate(text, maxLen) {
+  if (text.length <= maxLen) return text;
+  const truncated = text.slice(0, maxLen);
+  const lastSpace = truncated.lastIndexOf(' ');
+  return lastSpace > maxLen * 0.6 ? truncated.slice(0, lastSpace) + '...' : truncated + '...';
+}
+
 async function generateFromNews(newsConfig) {
   const predictions = [];
   if (!NEWS_API_KEY) return predictions;
@@ -1001,11 +1184,14 @@ async function generateFromNews(newsConfig) {
     const formatType = newsConfig.formats || 'general';
     const formatPool = NEWS_FORMATS_BY_TYPE[formatType] || NEWS_FORMATS_BY_TYPE.general;
 
-    // Process more articles (up to 8), create more predictions
-    for (const article of data.results.slice(0, 8)) {
-      if (!article.title || article.title.length < 15) continue;
+    // Sort by source authority (lower priority number = more authoritative source)
+    const sorted = data.results
+      .filter(a => a.title && a.title.length >= 15)
+      .sort((a, b) => (a.source_priority || 99999) - (b.source_priority || 99999));
 
-      const title = article.title.slice(0, 80);
+    // Process top 6 articles by authority
+    for (const article of sorted.slice(0, 6)) {
+      const title = smartTruncate(article.title, 80);
       const fmt = formatPool[Math.floor(Math.random() * formatPool.length)];
 
       let finalFmt = fmt;
@@ -1021,6 +1207,8 @@ async function generateFromNews(newsConfig) {
         expiresAt: expiry,
         metadata: {
           source: 'newsdata',
+          sourceName: article.source_name || null,
+          sourcePriority: article.source_priority || null,
           type: isEvent ? 'event' : 'opinion',
           articleId: article.article_id,
           keywords: article.keywords || null,
@@ -1031,8 +1219,8 @@ async function generateFromNews(newsConfig) {
   } catch (e) {
     console.error(`News API error (${newsConfig.predCat}):`, e.message);
   }
-  // Return more predictions per call — 3 instead of 2
-  return pickRandom(predictions, 3);
+  // Return top 5 predictions by source authority (already sorted)
+  return predictions.slice(0, 5);
 }
 
 // ============================================
