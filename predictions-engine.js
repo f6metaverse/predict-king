@@ -356,20 +356,47 @@ async function generateFootballLive() {
     const season = getCurrentSeason();
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
 
-    // Fetch each date individually (from/to not supported on free plan)
+    // Fetch first date to test, then continue if it works
     const allMatches = [];
-    for (const date of dates) {
-      try {
-        const res = await fetch(`https://v3.football.api-sports.io/fixtures?date=${date}&season=${season}`, { headers });
-        const data = await res.json();
-        if (data.response) {
-          allMatches.push(...data.response);
+    const testDate = dates[0];
+    console.log(`    Football: testing API with date=${testDate}, season=${season}...`);
+
+    const testRes = await fetch(`https://v3.football.api-sports.io/fixtures?date=${testDate}&season=${season}`, { headers });
+    const testData = await testRes.json();
+    console.log(`    Football API response: status=${testRes.status}, results=${testData.results}, errors=${JSON.stringify(testData.errors || {})}, response_length=${testData.response?.length || 0}`);
+
+    // If first call fails, try without season parameter
+    if (!testData.response || testData.response.length === 0) {
+      console.log('    Football: retrying without season parameter...');
+      const retryRes = await fetch(`https://v3.football.api-sports.io/fixtures?date=${testDate}`, { headers });
+      const retryData = await retryRes.json();
+      console.log(`    Football retry: results=${retryData.results}, errors=${JSON.stringify(retryData.errors || {})}, response_length=${retryData.response?.length || 0}`);
+
+      if (retryData.response && retryData.response.length > 0) {
+        console.log('    Football: works WITHOUT season! Fetching all dates...');
+        allMatches.push(...retryData.response);
+        // Fetch remaining dates without season
+        for (const date of dates.slice(1)) {
+          try {
+            const res = await fetch(`https://v3.football.api-sports.io/fixtures?date=${date}`, { headers });
+            const data = await res.json();
+            if (data.response) allMatches.push(...data.response);
+          } catch (e) {
+            console.error(`Football fetch error for ${date}:`, e.message);
+          }
         }
-        if (data.errors && Object.keys(data.errors).length > 0) {
-          console.error(`Football API error for ${date}:`, JSON.stringify(data.errors));
+      }
+    } else {
+      allMatches.push(...testData.response);
+      // Fetch remaining dates with season
+      for (const date of dates.slice(1)) {
+        try {
+          const res = await fetch(`https://v3.football.api-sports.io/fixtures?date=${date}&season=${season}`, { headers });
+          const data = await res.json();
+          if (data.response) allMatches.push(...data.response);
+        } catch (e) {
+          console.error(`Football fetch error for ${date}:`, e.message);
         }
-      } catch (e) {
-        console.error(`Football fetch error for ${date}:`, e.message);
       }
     }
 
