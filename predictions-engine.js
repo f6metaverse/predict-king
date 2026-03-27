@@ -611,10 +611,10 @@ async function generateCombatLive() {
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    // Free plan doesn't support 'next' — fetch by date for next 14 days
+    // Free plan: only 3 days access (yesterday, today, tomorrow)
     const headers2 = { 'x-apisports-key': FOOTBALL_API_KEY };
     const mmaAllFights = [];
-    const mmaDates = getNextDays(13);
+    const mmaDates = getNextDays(2); // today + 2 days = 3 days
     for (const date of mmaDates) {
       try {
         const res = await fetch(`https://v1.mma.api-sports.io/fights?date=${date}`, { headers: headers2 });
@@ -676,28 +676,31 @@ async function generateF1Live() {
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    // Free plan doesn't support 'next' — fetch current season races
-    const currentYear = new Date().getFullYear();
-    const f1Res = await fetch(`https://v1.formula-1.api-sports.io/races?season=${currentYear}`, {
-      headers: { 'x-apisports-key': FOOTBALL_API_KEY }
-    });
-    const f1Data = await f1Res.json();
-    if (f1Data.errors && Object.keys(f1Data.errors).length > 0) {
-      console.error('F1 API errors:', JSON.stringify(f1Data.errors));
-      // Try previous year if current fails
-      const retryRes = await fetch(`https://v1.formula-1.api-sports.io/races?season=${currentYear - 1}`, {
-        headers: { 'x-apisports-key': FOOTBALL_API_KEY }
-      });
-      const retryData = await retryRes.json();
-      if (retryData.errors && Object.keys(retryData.errors).length > 0) {
-        console.error('F1 retry errors:', JSON.stringify(retryData.errors));
+    // Free plan: season and next blocked — try fetching by date like MMA
+    const headers3 = { 'x-apisports-key': FOOTBALL_API_KEY };
+    const f1AllRaces = [];
+    const f1Dates = getNextDays(13); // 14 days ahead to catch race weekends
+    for (const date of f1Dates) {
+      try {
+        const f1Res = await fetch(`https://v1.formula-1.api-sports.io/races?date=${date}`, { headers: headers3 });
+        const f1Data = await f1Res.json();
+        if (f1Data.response && Array.isArray(f1Data.response)) {
+          f1AllRaces.push(...f1Data.response);
+        }
+        if (f1Data.errors && Object.keys(f1Data.errors).length > 0) {
+          console.error('F1 API errors:', JSON.stringify(f1Data.errors));
+          break; // Stop if date param also doesn't work
+        }
+      } catch (e) {
+        console.error(`F1 fetch error for ${date}:`, e.message);
       }
     }
-    const f1Races = f1Data.response && Array.isArray(f1Data.response) ? f1Data.response : [];
+    console.log(`    F1: ${f1AllRaces.length} races found across ${f1Dates.length} days`);
 
-    // Filter only upcoming races
-    const now = new Date();
-    const upcomingRaces = f1Races.filter(r => r.date && new Date(r.date) > now);
+    // Filter only upcoming (not started)
+    const upcomingRaces = f1AllRaces.filter(r =>
+      r.status !== 'Completed' && r.status !== 'Cancelled'
+    );
 
     if (upcomingRaces.length > 0) {
       for (const race of upcomingRaces.slice(0, 3)) {

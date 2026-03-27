@@ -465,10 +465,17 @@ async function initPredictions() {
     console.log('DB migration note:', e.message);
   }
 
-  // Clean up old static predictions (no metadata = old engine)
+  // Clean up old static predictions (no metadata = old engine) + old debate category
   try {
     const result = await db.pool.query(
-      `DELETE FROM predictions WHERE resolved = FALSE AND (metadata IS NULL OR metadata = '{}' OR metadata = 'null')`
+      `DELETE FROM predictions WHERE resolved = FALSE AND (
+        metadata IS NULL
+        OR metadata::text = '{}'
+        OR metadata::text = 'null'
+        OR metadata::text = '""'
+        OR category = 'debate'
+        OR (metadata->>'type' IS NULL AND metadata->>'source' IS NULL AND metadata->>'fixtureId' IS NULL AND metadata->>'gameId' IS NULL AND metadata->>'coinId' IS NULL)
+      )`
     );
     if (result.rowCount > 0) {
       console.log(`Cleanup: removed ${result.rowCount} old static predictions`);
