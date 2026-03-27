@@ -345,7 +345,52 @@ const NEWS_FORMATS_BY_TYPE = {
 // ============================================
 
 // Top football leagues to prioritize
-const TOP_FOOTBALL_LEAGUES = [39, 140, 61, 135, 2, 78, 253, 262, 3, 848, 1, 4, 5];
+const TOP_FOOTBALL_LEAGUES = [
+  // Top domestic leagues
+  39,   // Premier League (England)
+  140,  // La Liga (Spain)
+  61,   // Ligue 1 (France)
+  135,  // Serie A (Italy)
+  78,   // Bundesliga (Germany)
+  253,  // MLS (USA)
+  262,  // Liga MX (Mexico)
+  71,   // Serie A (Brazil)
+  128,  // Liga Profesional (Argentina)
+  94,   // Primeira Liga (Portugal)
+  88,   // Eredivisie (Netherlands)
+  144,  // Jupiler Pro League (Belgium)
+  203,  // Super Lig (Turkey)
+  307,  // Saudi Pro League
+  // UEFA club competitions
+  2,    // Champions League
+  3,    // Europa League
+  848,  // Conference League
+  531,  // UEFA Super Cup
+  // International
+  1,    // World Cup
+  4,    // Euro Championship
+  5,    // UEFA Nations League
+  6,    // Africa Cup of Nations
+  9,    // Copa America
+  10,   // Friendlies (international)
+  37,   // World Cup Qualification Playoffs
+  29,   // World Cup Qualification Africa
+  30,   // World Cup Qualification Asia
+  31,   // World Cup Qualification CONCACAF
+  32,   // World Cup Qualification Europe
+  34,   // World Cup Qualification South America
+  536,  // CONCACAF Nations League
+  960,  // Euro Qualification
+  1222, // FIFA Series
+  1207, // CONCACAF Series
+  // South American club
+  13,   // Copa Libertadores
+  11,   // Copa Sudamericana
+  // Other continental
+  12,   // CAF Champions League
+  17,   // AFC Champions League
+  15,   // FIFA Club World Cup
+];
 
 async function generateFootballLive() {
   const predictions = [];
