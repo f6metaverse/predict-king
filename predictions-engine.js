@@ -490,7 +490,7 @@ async function generateNBALive() {
         const data = await res.json();
         if (data.response) {
           const nbaGames = data.response.filter(g =>
-            g.league?.name?.includes('NBA') &&
+            g.league?.name === 'NBA' &&
             (g.status?.short === 'NS' || g.status?.short === null)
           );
           allGames.push(...nbaGames);
@@ -604,7 +604,7 @@ async function generateHockeyLive() {
         const data = await res.json();
         if (data.response) {
           const nhlGames = data.response.filter(g =>
-            g.league?.name?.includes('NHL') &&
+            (g.league?.name === 'NHL' || g.league?.name === 'KHL') &&
             (g.status?.short === 'NS' || !g.status?.short)
           );
           allGames.push(...nhlGames);
