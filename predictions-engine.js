@@ -1515,7 +1515,9 @@ async function lightCycle(active, counts) {
   let totalGenerated = 0;
 
   // Crypto: prices change constantly, always worth refreshing
-  if ((counts.crypto || 0) < 5) {
+  // Count only PRICE-based crypto predictions (not news-based ones)
+  const cryptoPricePreds = active.filter(p => p.category === 'crypto' && p.metadata?.coinId).length;
+  if (cryptoPricePreds < 8) {
     try {
       const cryptoLive = await generateCryptoLive();
       for (const pred of cryptoLive) {
