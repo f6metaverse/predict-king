@@ -323,12 +323,12 @@
     function generateTweets(pred) {
       const tweets = [];
       const q = pred.question || pred.title || '';
-      const optA = pred.option_a || 'Option A';
-      const optB = pred.option_b || 'Option B';
+      const optA = pred.optionA || pred.option_a || 'Option A';
+      const optB = pred.optionB || pred.option_b || 'Option B';
       const cat = pred.category || '';
       const tags = getHashtags(cat);
-      const votesA = pred.votes_a || 0;
-      const votesB = pred.votes_b || 0;
+      const votesA = pred.votesA || pred.votes_a || 0;
+      const votesB = pred.votesB || pred.votes_b || 0;
       const totalVotes = votesA + votesB;
 
       // 1) Debate tweet
@@ -419,8 +419,8 @@
           <span class="category-badge ${group}">${cat}</span>
           ${pred.question || pred.title || 'Untitled'}
         </div>`;
-        html += `<div class="prediction-meta">${pred.option_a || '?'} vs ${pred.option_b || '?'}`;
-        const totalVotes = (pred.votes_a || 0) + (pred.votes_b || 0);
+        html += `<div class="prediction-meta">${pred.optionA || pred.option_a || '?'} vs ${pred.optionB || pred.option_b || '?'}`;
+        const totalVotes = (pred.votesA || pred.votes_a || 0) + (pred.votesB || pred.votes_b || 0);
         if (totalVotes > 0) html += ` &middot; ${totalVotes} vote${totalVotes !== 1 ? 's' : ''}`;
         html += `</div>`;
 
@@ -456,11 +456,8 @@
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         allPredictions = Array.isArray(data) ? data : (data.predictions || data.data || []);
-        // Only keep active/open predictions
-        allPredictions = allPredictions.filter(p => {
-          const s = (p.status || '').toLowerCase();
-          return !s || s === 'active' || s === 'open' || s === 'pending';
-        });
+        // Only keep non-resolved, non-expired predictions
+        allPredictions = allPredictions.filter(p => !p.resolved && new Date(p.expiresAt) > new Date());
         renderTweets();
       } catch (err) {
         document.getElementById('content').innerHTML = `<div class="error">Failed to load predictions: ${escapeHtml(err.message)}<br><br>Make sure the API is running at /api/predictions</div>`;
