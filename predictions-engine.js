@@ -676,75 +676,61 @@ async function generateF1Live() {
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    // Free plan: season and next blocked — try fetching by date like MMA
+    // Free plan: races endpoint requires season (blocked), next (blocked)
+    // Use competitions endpoint (works!) to get GP names, then create predictions
     const headers3 = { 'x-apisports-key': FOOTBALL_API_KEY };
-    const f1AllRaces = [];
-    const f1Dates = getNextDays(13); // 14 days ahead to catch race weekends
-    for (const date of f1Dates) {
-      try {
-        const f1Res = await fetch(`https://v1.formula-1.api-sports.io/races?date=${date}`, { headers: headers3 });
-        const f1Data = await f1Res.json();
-        if (f1Data.response && Array.isArray(f1Data.response)) {
-          f1AllRaces.push(...f1Data.response);
-        }
-        if (f1Data.errors && Object.keys(f1Data.errors).length > 0) {
-          console.error('F1 API errors:', JSON.stringify(f1Data.errors));
-          break; // Stop if date param also doesn't work
-        }
-      } catch (e) {
-        console.error(`F1 fetch error for ${date}:`, e.message);
-      }
+    const compRes = await fetch('https://v1.formula-1.api-sports.io/competitions', { headers: headers3 });
+    const compData = await compRes.json();
+
+    if (compData.errors && Object.keys(compData.errors).length > 0) {
+      console.error('F1 competitions errors:', JSON.stringify(compData.errors));
+      return predictions;
     }
-    console.log(`    F1: ${f1AllRaces.length} races found across ${f1Dates.length} days`);
 
-    // Filter only upcoming (not started)
-    const upcomingRaces = f1AllRaces.filter(r =>
-      r.status !== 'Completed' && r.status !== 'Cancelled'
-    );
+    const competitions = compData.response && Array.isArray(compData.response) ? compData.response : [];
+    console.log(`    F1: ${competitions.length} competitions found`);
 
-    if (upcomingRaces.length > 0) {
-      for (const race of upcomingRaces.slice(0, 3)) {
-        const name = race.competition?.name || 'next race';
-        const kickoff = race.date;
-        const raceId = race.id;
-        const dateStr = kickoff ? formatMatchDate(kickoff) : 'This weekend';
+    if (competitions.length === 0) return predictions;
 
-        const baseMetadata = {
-          raceId, kickoff, apiType: 'formula-1',
-          raceName: name
-        };
+    // Pick a few random upcoming GPs to create predictions about
+    const gpNames = competitions.map(c => c.name).filter(n => n && n.includes('Grand Prix'));
+    const selectedGPs = pickRandom(gpNames, 4);
 
-        const expiry = kickoff ? expiresAtKickoff(kickoff) : expiresInHours(72);
+    for (const gpName of selectedGPs) {
+      const baseMetadata = {
+        apiType: 'formula-1',
+        raceName: gpName
+      };
 
-        // Dynamic F1 predictions — no hardcoded driver names
-        const f1Templates = [
-          { question: `🏎 F1 ${name}: Will the polesitter win the race? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'pole_wins' },
-          { question: `🏎 F1 ${name}: Safety Car during the race? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'safety_car' },
-          { question: `🏎 F1 ${name}: Any DNF in the top 5? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'dnf' },
-          { question: `🏎 F1 ${name}: Over 5 overtakes for the lead? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'overtakes' },
-          { question: `🏎 F1 ${name}: Podium finish for the home team? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'home_podium' },
-          { question: `🏎 F1 ${name}: Rain during the race? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'rain' },
-          { question: `🏎 F1 ${name}: Fastest lap by the winner? (${dateStr})`, optionA: 'YES', optionB: 'NO', predType: 'fastest_lap' },
-          { question: `🏎 F1 ${name}: Over 1 pit stop for the winner? (${dateStr})`, optionA: 'Multi-stop', optionB: '1-stop', predType: 'pit_strategy' },
-        ];
+      // Expire in 7 days (we don't have exact race dates from competitions endpoint)
+      const expiry = expiresInHours(168);
 
-        // Pick 3 different templates for this race
-        const picked = pickRandom(f1Templates, 3);
-        for (const tmpl of picked) {
-          predictions.push({
-            question: tmpl.question,
-            optionA: tmpl.optionA, optionB: tmpl.optionB,
-            category: 'f1', emoji: '🏎',
-            expiresAt: expiry,
-            metadata: { ...baseMetadata, predType: tmpl.predType }
-          });
-        }
+      const f1Templates = [
+        { question: `🏎 F1 ${gpName}: Will the polesitter win the race?`, optionA: 'YES', optionB: 'NO', predType: 'pole_wins' },
+        { question: `🏎 F1 ${gpName}: Safety Car during the race?`, optionA: 'YES', optionB: 'NO', predType: 'safety_car' },
+        { question: `🏎 F1 ${gpName}: Any DNF in the top 5?`, optionA: 'YES', optionB: 'NO', predType: 'dnf' },
+        { question: `🏎 F1 ${gpName}: Rain during the race?`, optionA: 'YES', optionB: 'NO', predType: 'rain' },
+        { question: `🏎 F1 ${gpName}: Fastest lap by the winner?`, optionA: 'YES', optionB: 'NO', predType: 'fastest_lap' },
+        { question: `🏎 F1 ${gpName}: Over 1 pit stop for the winner?`, optionA: 'Multi-stop', optionB: '1-stop', predType: 'pit_strategy' },
+        { question: `🏎 F1 ${gpName}: First lap incident?`, optionA: 'YES', optionB: 'NO', predType: 'first_lap' },
+        { question: `🏎 F1 ${gpName}: Podium surprise (non-top 3 team)?`, optionA: 'YES', optionB: 'NO', predType: 'surprise_podium' },
+      ];
+
+      const picked = pickRandom(f1Templates, 2);
+      for (const tmpl of picked) {
+        predictions.push({
+          question: tmpl.question,
+          optionA: tmpl.optionA, optionB: tmpl.optionB,
+          category: 'f1', emoji: '🏎',
+          expiresAt: expiry,
+          metadata: { ...baseMetadata, predType: tmpl.predType }
+        });
       }
     }
   } catch (e) {
     console.error('F1 API error:', e.message);
   }
-  return pickRandom(predictions, 3);
+  return pickRandom(predictions, 4);
 }
 
 async function generateRugbyLive() {
