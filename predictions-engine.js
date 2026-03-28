@@ -895,88 +895,263 @@ const F1_CALENDAR_2026 = [
   { name: 'Abu Dhabi Grand Prix', month: 12, day: 12 },
 ];
 
+// ============================================
+// F1 NEWS-POWERED GENERATOR
+// Parses F1 news articles to extract drivers, teams, GP context
+// and generates engaging fan-focused predictions
+// ============================================
+
+// F1 2026 drivers — detect names in article titles/keywords
+const F1_DRIVERS = [
+  { name: 'Verstappen', full: 'Max Verstappen', team: 'Red Bull' },
+  { name: 'Hamilton', full: 'Lewis Hamilton', team: 'Ferrari' },
+  { name: 'Leclerc', full: 'Charles Leclerc', team: 'Ferrari' },
+  { name: 'Norris', full: 'Lando Norris', team: 'McLaren' },
+  { name: 'Piastri', full: 'Oscar Piastri', team: 'McLaren' },
+  { name: 'Russell', full: 'George Russell', team: 'Mercedes' },
+  { name: 'Antonelli', full: 'Kimi Antonelli', team: 'Mercedes' },
+  { name: 'Alonso', full: 'Fernando Alonso', team: 'Aston Martin' },
+  { name: 'Stroll', full: 'Lance Stroll', team: 'Aston Martin' },
+  { name: 'Gasly', full: 'Pierre Gasly', team: 'Alpine' },
+  { name: 'Doohan', full: 'Jack Doohan', team: 'Alpine' },
+  { name: 'Sainz', full: 'Carlos Sainz', team: 'Williams' },
+  { name: 'Albon', full: 'Alex Albon', team: 'Williams' },
+  { name: 'Tsunoda', full: 'Yuki Tsunoda', team: 'RB' },
+  { name: 'Lawson', full: 'Liam Lawson', team: 'Red Bull' },
+  { name: 'Hulkenberg', full: 'Nico Hulkenberg', team: 'Sauber' },
+  { name: 'Bortoleto', full: 'Gabriel Bortoleto', team: 'Sauber' },
+  { name: 'Ocon', full: 'Esteban Ocon', team: 'Haas' },
+  { name: 'Bearman', full: 'Oliver Bearman', team: 'Haas' },
+  { name: 'Hadjar', full: 'Isack Hadjar', team: 'RB' },
+];
+
+// F1 teams for detection
+const F1_TEAMS = [
+  'Red Bull', 'Ferrari', 'McLaren', 'Mercedes', 'Aston Martin',
+  'Alpine', 'Williams', 'RB', 'Sauber', 'Haas'
+];
+
+// GP name aliases for detection in article text
+const GP_ALIASES = {
+  'Australian': ['australia', 'melbourne', 'albert park'],
+  'Chinese': ['china', 'shanghai'],
+  'Japanese': ['japan', 'suzuka'],
+  'Bahrain': ['bahrain', 'sakhir'],
+  'Saudi Arabian': ['saudi', 'jeddah'],
+  'Miami': ['miami'],
+  'Emilia Romagna': ['imola', 'emilia'],
+  'Monaco': ['monaco', 'monte carlo'],
+  'Spanish': ['spain', 'barcelona', 'spanish'],
+  'Canadian': ['canada', 'montreal'],
+  'Austrian': ['austria', 'spielberg', 'red bull ring'],
+  'British': ['silverstone', 'british'],
+  'Belgian': ['spa', 'belgian', 'belgium'],
+  'Dutch': ['zandvoort', 'dutch', 'netherlands'],
+  'Italian': ['monza', 'italian'],
+  'Azerbaijan': ['baku', 'azerbaijan'],
+  'Singapore': ['singapore', 'marina bay'],
+  'United States': ['austin', 'cota', 'united states gp'],
+  'Mexico City': ['mexico'],
+  'Brazilian': ['interlagos', 'brazil', 'sao paulo'],
+  'Las Vegas': ['las vegas', 'vegas'],
+  'Qatar': ['qatar', 'lusail'],
+  'Abu Dhabi': ['abu dhabi', 'yas marina'],
+};
+
 async function generateF1Live() {
   const predictions = [];
   try {
-    if (!FOOTBALL_API_KEY) return predictions;
+    if (!NEWS_API_KEY) return predictions;
 
-    // Find the next 2 upcoming GPs from the hardcoded calendar
+    // Step 1: Find the next GP from the hardcoded calendar
     const now = new Date();
-    const upcomingRaces = F1_CALENDAR_2026.filter(race => {
-      const raceDate = new Date(Date.UTC(2026, race.month - 1, race.day, 13, 0)); // Race at 13:00 UTC
+    const nextRace = F1_CALENDAR_2026.find(race => {
+      const raceDate = new Date(Date.UTC(2026, race.month - 1, race.day, 13, 0));
       return raceDate > now;
-    }).slice(0, 2); // Next 2 races
+    });
 
-    if (upcomingRaces.length === 0) {
+    if (!nextRace) {
       console.log('    F1: No upcoming races left in 2026 calendar');
       return predictions;
     }
 
-    // Fetch competitions from API to validate GP names exist
-    const headers3 = { 'x-apisports-key': FOOTBALL_API_KEY };
-    const compRes = await fetch('https://v1.formula-1.api-sports.io/competitions', { headers: headers3 });
-    const compData = await compRes.json();
+    const raceDate = new Date(Date.UTC(2026, nextRace.month - 1, nextRace.day, 13, 0));
+    const expiry = raceDate.toISOString();
+    const gpShort = nextRace.name.replace(' Grand Prix', '');
+    const gpName = nextRace.name;
 
-    if (compData.errors && Object.keys(compData.errors).length > 0) {
-      console.error('F1 competitions errors:', JSON.stringify(compData.errors));
-      return predictions;
+    console.log(`    F1: Next race = ${gpName} (${raceDate.toISOString().split('T')[0]})`);
+
+    // Step 2: Fetch F1 news from NewsData
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=sports&qInTitle=F1%20OR%20Formula%201%20OR%20Grand%20Prix%20OR%20${encodeURIComponent(gpShort)}&removeduplicate=1`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    const articles = (data.results || []).filter(a => a.title && a.title.length >= 15);
+    console.log(`    F1: ${articles.length} news articles found`);
+
+    // Step 3: Parse all articles — count driver/team mentions
+    const driverMentions = {};
+    const teamMentions = {};
+    let gpConfirmed = gpName; // default to calendar
+
+    const allText = articles.map(a =>
+      `${a.title} ${a.description || ''} ${(a.keywords || []).join(' ')}`
+    ).join(' ').toLowerCase();
+
+    // Detect GP from news (confirm it matches the calendar)
+    for (const [gp, aliases] of Object.entries(GP_ALIASES)) {
+      if (aliases.some(alias => allText.includes(alias))) {
+        if (gpName.toLowerCase().includes(gp.toLowerCase())) {
+          gpConfirmed = gpName;
+          break;
+        }
+      }
     }
 
-    const competitions = compData.response && Array.isArray(compData.response) ? compData.response : [];
-    const apiGPNames = competitions.map(c => c.name).filter(n => n && n.includes('Grand Prix'));
-    console.log(`    F1: ${apiGPNames.length} GPs from API, ${upcomingRaces.length} upcoming from calendar`);
-
-    // Fuzzy match: extract location keyword from calendar name and find it in API names
-    function findAPIMatch(calendarName) {
-      const keyword = calendarName.replace(' Grand Prix', '').toLowerCase();
-      return apiGPNames.find(apiName => apiName.toLowerCase().includes(keyword));
+    // Count driver mentions across all articles
+    for (const driver of F1_DRIVERS) {
+      const nameLC = driver.name.toLowerCase();
+      const fullLC = driver.full.toLowerCase();
+      let count = 0;
+      for (const article of articles) {
+        const text = `${article.title} ${article.description || ''} ${(article.keywords || []).join(' ')}`.toLowerCase();
+        if (text.includes(nameLC) || text.includes(fullLC)) count++;
+      }
+      if (count > 0) driverMentions[driver.name] = { ...driver, count };
     }
 
-    // All available F1 prediction templates
-    const f1Templates = [
-      { q: (gp) => `🏎 F1 ${gp}: Will the polesitter win the race?`, optA: 'YES', optB: 'NO', predType: 'pole_wins' },
-      { q: (gp) => `🏎 F1 ${gp}: Safety Car during the race?`, optA: 'YES', optB: 'NO', predType: 'safety_car' },
-      { q: (gp) => `🏎 F1 ${gp}: Any DNF in the top 5?`, optA: 'YES', optB: 'NO', predType: 'dnf' },
-      { q: (gp) => `🏎 F1 ${gp}: Rain during the race?`, optA: 'YES', optB: 'NO', predType: 'rain' },
-      { q: (gp) => `🏎 F1 ${gp}: Fastest lap by the winner?`, optA: 'YES', optB: 'NO', predType: 'fastest_lap' },
-      { q: (gp) => `🏎 F1 ${gp}: Over 1 pit stop for the winner?`, optA: 'Multi-stop', optB: '1-stop', predType: 'pit_strategy' },
-      { q: (gp) => `🏎 F1 ${gp}: First lap incident?`, optA: 'YES', optB: 'NO', predType: 'first_lap' },
-      { q: (gp) => `🏎 F1 ${gp}: Podium surprise (non-top 3 team)?`, optA: 'YES', optB: 'NO', predType: 'surprise_podium' },
-    ];
+    // Count team mentions
+    for (const team of F1_TEAMS) {
+      const teamLC = team.toLowerCase();
+      let count = 0;
+      for (const article of articles) {
+        const text = `${article.title} ${article.description || ''} ${(article.keywords || []).join(' ')}`.toLowerCase();
+        if (text.includes(teamLC)) count++;
+      }
+      if (count > 0) teamMentions[team] = count;
+    }
 
-    for (let raceIdx = 0; raceIdx < upcomingRaces.length; raceIdx++) {
-      const race = upcomingRaces[raceIdx];
-      // Use the API-matched name if found, otherwise use calendar name
-      const gpName = findAPIMatch(race.name) || race.name;
+    // Sort drivers and teams by mentions (most talked about = most relevant)
+    const topDrivers = Object.values(driverMentions).sort((a, b) => b.count - a.count);
+    const topTeams = Object.entries(teamMentions).sort((a, b) => b[1] - a[1]).map(([name]) => name);
 
-      // Set expiry to race day (Sunday) at 13:00 UTC (typical race start)
-      const raceDate = new Date(Date.UTC(2026, race.month - 1, race.day, 13, 0));
-      const expiry = raceDate.toISOString();
+    console.log(`    F1: Top drivers in news: ${topDrivers.slice(0, 5).map(d => `${d.name}(${d.count})`).join(', ')}`);
+    console.log(`    F1: Top teams in news: ${topTeams.slice(0, 3).join(', ')}`);
 
-      const baseMetadata = {
-        apiType: 'formula-1',
-        raceName: gpName,
-        raceDate: expiry
-      };
+    const baseMetadata = {
+      apiType: 'formula-1',
+      source: 'newsdata',
+      raceName: gpConfirmed,
+      raceDate: expiry
+    };
 
-      // Next GP (index 0): 4 diverse predictions; GP after that (index 1): 2 predictions
-      const templateCount = raceIdx === 0 ? 4 : 2;
-      const picked = pickRandom(f1Templates, templateCount);
+    // Step 4: Generate predictions based on news context
 
-      for (const tmpl of picked) {
+    // --- PREDICTION 1: Race winner — top 2 most mentioned drivers ---
+    if (topDrivers.length >= 2) {
+      const d1 = topDrivers[0];
+      const d2 = topDrivers[1];
+      predictions.push({
+        question: `🏎 ${gpConfirmed}: ${d1.full} vs ${d2.full} — Who finishes ahead?`,
+        optionA: d1.name, optionB: d2.name,
+        category: 'f1', emoji: '🏎',
+        expiresAt: expiry,
+        metadata: { ...baseMetadata, predType: 'head_to_head', driver1: d1.full, driver2: d2.full }
+      });
+    }
+
+    // --- PREDICTION 2: Podium for a hot driver (3rd or 4th most mentioned) ---
+    if (topDrivers.length >= 3) {
+      const podiumDriver = topDrivers[2];
+      predictions.push({
+        question: `🏎 ${gpConfirmed}: ${podiumDriver.full} on the podium?`,
+        optionA: 'YES — Podium', optionB: 'NO — Misses out',
+        category: 'f1', emoji: '🏎',
+        expiresAt: expiry,
+        metadata: { ...baseMetadata, predType: 'podium', driver: podiumDriver.full }
+      });
+    }
+
+    // --- PREDICTION 3: Team battle — top 2 teams ---
+    if (topTeams.length >= 2) {
+      predictions.push({
+        question: `🏎 ${gpConfirmed}: ${topTeams[0]} vs ${topTeams[1]} — Best team this weekend?`,
+        optionA: topTeams[0], optionB: topTeams[1],
+        category: 'f1', emoji: '🏎',
+        expiresAt: expiry,
+        metadata: { ...baseMetadata, predType: 'team_battle', team1: topTeams[0], team2: topTeams[1] }
+      });
+    }
+
+    // --- PREDICTION 4: Pole position for top driver ---
+    if (topDrivers.length >= 1) {
+      predictions.push({
+        question: `🏎 ${gpConfirmed} Qualifying: Pole position for ${topDrivers[0].full}?`,
+        optionA: 'YES — P1', optionB: 'NO — Someone else',
+        category: 'f1', emoji: '🏎',
+        expiresAt: expiry,
+        metadata: { ...baseMetadata, predType: 'pole', driver: topDrivers[0].full }
+      });
+    }
+
+    // --- PREDICTION 5: Teammate battle (same team, both mentioned in news) ---
+    const teamDriverPairs = {};
+    for (const d of topDrivers) {
+      if (!teamDriverPairs[d.team]) teamDriverPairs[d.team] = [];
+      teamDriverPairs[d.team].push(d);
+    }
+    for (const [team, drivers] of Object.entries(teamDriverPairs)) {
+      if (drivers.length >= 2) {
         predictions.push({
-          question: tmpl.q(gpName),
-          optionA: tmpl.optA, optionB: tmpl.optB,
+          question: `🏎 ${gpConfirmed}: ${team} internal battle — ${drivers[0].name} or ${drivers[1].name}?`,
+          optionA: drivers[0].name, optionB: drivers[1].name,
           category: 'f1', emoji: '🏎',
           expiresAt: expiry,
-          metadata: { ...baseMetadata, predType: tmpl.predType }
+          metadata: { ...baseMetadata, predType: 'teammate_battle', team, driver1: drivers[0].full, driver2: drivers[1].full }
+        });
+        break; // Only 1 teammate battle
+      }
+    }
+
+    // --- PREDICTION 6: Race drama (always fun, always engaging) ---
+    const dramaTemplates = [
+      { q: `🏎 ${gpConfirmed}: Safety Car during the race?`, a: 'YES', b: 'NO', type: 'safety_car' },
+      { q: `🏎 ${gpConfirmed}: Any DNF in the top 5?`, a: 'YES — Drama', b: 'NO — Clean race', type: 'dnf' },
+      { q: `🏎 ${gpConfirmed}: First lap contact?`, a: 'YES — Chaos', b: 'NO — Clean start', type: 'first_lap' },
+    ];
+    const drama = dramaTemplates[Math.floor(Math.random() * dramaTemplates.length)];
+    predictions.push({
+      question: drama.q,
+      optionA: drama.a, optionB: drama.b,
+      category: 'f1', emoji: '🏎',
+      expiresAt: expiry,
+      metadata: { ...baseMetadata, predType: drama.type }
+    });
+
+    // If not enough drivers found in news, add generic GP predictions as fallback
+    if (topDrivers.length < 2) {
+      console.log('    F1: Not enough driver data from news, adding generic templates');
+      const fallbacks = [
+        { q: `🏎 ${gpConfirmed}: Will the polesitter win the race?`, a: 'YES', b: 'NO', type: 'pole_wins' },
+        { q: `🏎 ${gpConfirmed}: Podium surprise from a midfield team?`, a: 'YES — Surprise', b: 'NO — Top teams only', type: 'surprise_podium' },
+        { q: `🏎 ${gpConfirmed}: Over 1 pit stop strategy for the winner?`, a: 'Multi-stop', b: '1-stop', type: 'pit_strategy' },
+      ];
+      for (const fb of fallbacks) {
+        predictions.push({
+          question: fb.q,
+          optionA: fb.a, optionB: fb.b,
+          category: 'f1', emoji: '🏎',
+          expiresAt: expiry,
+          metadata: { ...baseMetadata, predType: fb.type }
         });
       }
     }
+
+    console.log(`    F1: ${predictions.length} predictions generated for ${gpConfirmed}`);
   } catch (e) {
-    console.error('F1 API error:', e.message);
+    console.error('F1 news engine error:', e.message);
   }
-  // Return ALL predictions (no pickRandom) — up to 6 predictions
   return predictions;
 }
 
