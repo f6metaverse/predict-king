@@ -412,7 +412,7 @@ async function generateFootballLive() {
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    const dates = getNextDays(3); // 4 days ahead (saves API quota: 4 calls instead of 7)
+    const dates = getNextDays(6); // 7 days ahead — top leagues play mostly on weekends
     const season = getCurrentSeason();
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
 
@@ -456,7 +456,9 @@ async function generateFootballLive() {
         kickoff,
         apiType: 'football',
         homeTeam: home,
-        awayTeam: away
+        awayTeam: away,
+        leagueId: match.league?.id,
+        leagueName: league
       };
 
       const templates = [
@@ -511,7 +513,7 @@ async function generateNBALive() {
     if (!FOOTBALL_API_KEY) return predictions;
 
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
-    const dates = getNextDays(3); // 4 days ahead (saves API quota)
+    const dates = getNextDays(6); // 7 days ahead — full week Monday to Sunday
 
     // Big market teams for prioritization
     const NBA_BIG_MARKET = ['Los Angeles Lakers', 'Golden State Warriors', 'Boston Celtics', 'New York Knicks', 'Brooklyn Nets', 'Miami Heat', 'Philadelphia 76ers', 'Dallas Mavericks', 'Milwaukee Bucks', 'Phoenix Suns', 'Denver Nuggets', 'Chicago Bulls', 'Cleveland Cavaliers', 'Minnesota Timberwolves', 'Oklahoma City Thunder', 'Sacramento Kings'];
@@ -603,7 +605,7 @@ async function generateNFLLive() {
     if (!FOOTBALL_API_KEY) return predictions;
 
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
-    const dates = getNextDays(3); // 4 days ahead (saves API quota)
+    const dates = getNextDays(6); // 7 days ahead — NFL games are Sun + Mon night
 
     const allGames = [];
     for (const date of dates) {
@@ -674,7 +676,7 @@ async function generateHockeyLive() {
     if (!FOOTBALL_API_KEY) return predictions;
 
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
-    const dates = getNextDays(3); // 4 days ahead (saves API quota)
+    const dates = getNextDays(6); // 7 days ahead — full week Monday to Sunday
 
     const allGames = [];
     for (const date of dates) {
@@ -755,10 +757,10 @@ async function generateCombatLive() {
   try {
     if (!FOOTBALL_API_KEY) return predictions;
 
-    // Free plan: only 3 days access (yesterday, today, tomorrow)
+    // 6 days ahead — UFC cards are mostly Saturday night
     const headers2 = { 'x-apisports-key': FOOTBALL_API_KEY };
     const mmaAllFights = [];
-    const mmaDates = getNextDays(2); // today + 2 days = 3 days
+    const mmaDates = getNextDays(5); // 6 days ahead — UFC cards are mostly Saturday
     for (const date of mmaDates) {
       try {
         const res = await fetch(`https://v1.mma.api-sports.io/fights?date=${date}`, { headers: headers2 });
@@ -984,7 +986,7 @@ async function generateRugbyLive() {
     if (!FOOTBALL_API_KEY) return predictions;
 
     const headers = { 'x-apisports-key': FOOTBALL_API_KEY };
-    const dates = getNextDays(3); // 4 days ahead (saves API quota)
+    const dates = getNextDays(6); // 7 days ahead — rugby matches are mostly Fri-Sun
 
     // Top rugby leagues to prioritize (already good sorting)
     const TOP_RUGBY_LEAGUES = [
@@ -1031,9 +1033,14 @@ async function generateRugbyLive() {
       const dateStr = kickoff ? formatMatchDate(kickoff) : 'This week';
       const expiry = kickoff ? expiresAtKickoff(kickoff) : expiresInHours(48);
 
+      const leagueName = game.league?.name || 'Rugby';
+      const leagueId = game.league?.id;
+
       const baseMetadata = {
         gameId, kickoff, apiType: 'rugby',
-        homeTeam: home, awayTeam: away
+        homeTeam: home, awayTeam: away,
+        leagueId,
+        leagueName
       };
 
       // Winner template
@@ -1588,7 +1595,7 @@ async function smartGenerate(forceWeekly = false) {
     p.metadata && (p.metadata.fixtureId || p.metadata.gameId || p.metadata.fightId || p.metadata.raceId || p.metadata.apiType)
   ).length;
 
-  const isWeeklyDay = (dayOfWeek === 1 || dayOfWeek === 3); // Monday or Wednesday
+  const isWeeklyDay = (dayOfWeek === 1); // Monday only — all sports fetch 7 days ahead
   const isMorning = (hour >= 6 && hour <= 10);
   const isEmergency = realSportPreds < 5; // Emergency only if critically low (was 10, caused quota burn)
 
@@ -1602,7 +1609,7 @@ async function smartGenerate(forceWeekly = false) {
     global._lastWeeklyFetch = Date.now();
     totalGenerated += await weeklySportsFetch(active);
   } else {
-    console.log(`  Sports: ${realSportPreds} real sport predictions active, skipping API (next fetch: Mon/Wed morning)`);
+    console.log(`  Sports: ${realSportPreds} real sport predictions active, skipping API (next fetch: Monday morning)`);
   }
 
   // --- Always run crypto + news + opinion backup ---
@@ -1627,7 +1634,7 @@ async function cleanupExpired() {
 
 async function startScheduler() {
   console.log('Prediction scheduler started');
-  console.log('  Sports: Mon + Wed morning (or emergency if < 5 sport preds)');
+  console.log('  Sports: Monday morning only, 7-day lookahead (or emergency if < 5 sport preds)');
   console.log('  Crypto + News: every 3h');
 
   // On startup: always do a full weekly fetch to fill the app

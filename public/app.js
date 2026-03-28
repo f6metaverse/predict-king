@@ -2,6 +2,7 @@
 const tg = window.Telegram?.WebApp;
 let currentUser = null;
 let currentCategory = 'all';
+let currentLeague = 'all'; // sub-filter for leagues within football/rugby
 
 // Secure fetch helper — sends Telegram auth data with every request
 function secureHeaders() {
@@ -101,7 +102,88 @@ function setupCategories() {
       document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentCategory = btn.dataset.cat;
+      currentLeague = 'all';
       loadPredictions();
+    });
+  });
+}
+
+// Sports that have league sub-filters
+const LEAGUE_SPORTS = ['football', 'rugby'];
+
+// Country flags for major football leagues
+const LEAGUE_FLAGS = {
+  // Football
+  2: '🏆', 3: '🏆', 848: '🏆', // Champions League, Europa League, Conference League
+  1: '🌍', 4: '🌍', 9: '🌎', 29: '🌍', // World Cup, Euro, Copa America, etc.
+  39: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', 40: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', // Premier League, Championship
+  140: '🇪🇸', // La Liga
+  135: '🇮🇹', // Serie A
+  78: '🇩🇪',  // Bundesliga
+  61: '🇫🇷',  // Ligue 1
+  88: '🇳🇱',  // Eredivisie
+  94: '🇵🇹',  // Primeira Liga
+  144: '🇧🇪', // Belgian Pro League
+  203: '🇹🇷', // Super Lig
+  307: '🇸🇦', // Saudi Pro League
+  253: '🇺🇸', // MLS
+  262: '🇲🇽', // Liga MX
+  71: '🇧🇷',  // Serie A Brazil
+  // Rugby
+  16: '🇫🇷',  // Top 14
+  48: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', // Premiership
+  76: '🌍',  // United Rugby Championship
+  44: '🇺🇸',  // Major League Rugby
+  27: '🇯🇵',  // Top League Japan
+  13: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', // Premiership Rugby
+};
+// Super Rugby (id 71) conflicts with Brazil Serie A — handled by sport context
+
+function buildLeagueFilter(predictions) {
+  const container = document.getElementById('leagueFilter');
+
+  if (!LEAGUE_SPORTS.includes(currentCategory)) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
+  // Extract unique leagues from predictions metadata
+  const leagues = new Map();
+  for (const p of predictions) {
+    const meta = p.metadata;
+    if (meta?.leagueName && meta?.leagueId) {
+      if (!leagues.has(meta.leagueId)) {
+        leagues.set(meta.leagueId, meta.leagueName);
+      }
+    }
+  }
+
+  if (leagues.size <= 1) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
+  // Build pills
+  let html = `<button class="league-btn ${currentLeague === 'all' ? 'active' : ''}" data-league="all">All</button>`;
+  for (const [id, name] of leagues) {
+    const flag = LEAGUE_FLAGS[id] || '';
+    const isActive = currentLeague === String(id) ? 'active' : '';
+    html += `<button class="league-btn ${isActive}" data-league="${id}">${flag ? flag + ' ' : ''}${name}</button>`;
+  }
+
+  container.innerHTML = html;
+  container.style.display = 'flex';
+
+  // Attach click listeners
+  container.querySelectorAll('.league-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.league-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentLeague = btn.dataset.league;
+      loadPredictions();
+      if (tg) tg.HapticFeedback?.impactOccurred('light');
     });
   });
 }
@@ -116,9 +198,17 @@ async function loadPredictions() {
     const res = await fetch(`/api/predictions?userId=${userId}`);
     const predictions = await res.json();
 
-    const filtered = currentCategory === 'all'
+    let filtered = currentCategory === 'all'
       ? predictions
       : predictions.filter(p => p.category === currentCategory);
+
+    // Build league sub-filter (before league filtering, so all pills show)
+    buildLeagueFilter(filtered);
+
+    // Apply league sub-filter
+    if (LEAGUE_SPORTS.includes(currentCategory) && currentLeague !== 'all') {
+      filtered = filtered.filter(p => String(p.metadata?.leagueId) === currentLeague);
+    }
 
     if (filtered.length === 0) {
       list.innerHTML = `
@@ -129,12 +219,62 @@ async function loadPredictions() {
       return;
     }
 
-    list.innerHTML = filtered.map(p => renderPrediction(p)).join('');
+    // Group by league for football/rugby, flat for others
+    if (LEAGUE_SPORTS.includes(currentCategory) && currentLeague === 'all') {
+      list.innerHTML = renderGroupedByLeague(filtered);
+    } else {
+      list.innerHTML = filtered.map(p => renderPrediction(p)).join('');
+    }
+
     attachVoteListeners();
   } catch (e) {
     console.error('Failed to load predictions:', e);
     list.innerHTML = '<div class="empty-state"><p>Failed to load</p></div>';
   }
+}
+
+function renderGroupedByLeague(predictions) {
+  // Group predictions by league
+  const groups = new Map();
+  const noLeague = [];
+
+  for (const p of predictions) {
+    const leagueId = p.metadata?.leagueId;
+    const leagueName = p.metadata?.leagueName;
+    if (leagueId && leagueName) {
+      if (!groups.has(leagueId)) {
+        groups.set(leagueId, { name: leagueName, preds: [] });
+      }
+      groups.get(leagueId).preds.push(p);
+    } else {
+      noLeague.push(p);
+    }
+  }
+
+  let html = '';
+  for (const [id, group] of groups) {
+    const flag = LEAGUE_FLAGS[id] || '';
+    html += `
+      <div class="league-header">
+        <span class="league-header-line"></span>
+        <span class="league-header-name">${flag ? flag + ' ' : ''}${group.name}</span>
+        <span class="league-header-line"></span>
+      </div>`;
+    html += group.preds.map(p => renderPrediction(p)).join('');
+  }
+
+  // Predictions without league info (old ones before this update)
+  if (noLeague.length > 0) {
+    html += `
+      <div class="league-header">
+        <span class="league-header-line"></span>
+        <span class="league-header-name">Other</span>
+        <span class="league-header-line"></span>
+      </div>`;
+    html += noLeague.map(p => renderPrediction(p)).join('');
+  }
+
+  return html;
 }
 
 function renderPrediction(p) {
