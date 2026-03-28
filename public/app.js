@@ -288,8 +288,10 @@ async function loadPredictions() {
 
     let filtered;
     if (currentCategory === 'all' && currentParent === 'all') {
-      // Show everything
-      filtered = predictions;
+      // TRENDING FEED — curated sections instead of dumping everything
+      list.innerHTML = renderTrendingFeed(predictions);
+      attachVoteListeners();
+      return;
     } else if (currentCategory === 'all' && PARENT_CATS[currentParent]) {
       // Parent selected but no sub-category — show all children of this parent
       filtered = predictions.filter(p => PARENT_CATS[currentParent].includes(p.category));
@@ -327,6 +329,109 @@ async function loadPredictions() {
     console.error('Failed to load predictions:', e);
     list.innerHTML = '<div class="empty-state"><p>Failed to load</p></div>';
   }
+}
+
+// --- TRENDING FEED — smart "All" page with curated sections ---
+function getHotScore(p) {
+  const now = Date.now();
+  const created = new Date(p.createdAt).getTime();
+  const expires = new Date(p.expiresAt).getTime();
+  const votes = (p.votesA || 0) + (p.votesB || 0);
+
+  // Freshness: created less than 6h ago = big boost, decays over 24h
+  const ageHours = (now - created) / 3600000;
+  const freshness = ageHours < 6 ? 50 : ageHours < 12 ? 30 : ageHours < 24 ? 15 : 0;
+
+  // Urgency: expires within 12h = boost (vote NOW before it's too late)
+  const hoursLeft = (expires - now) / 3600000;
+  const urgency = hoursLeft < 3 ? 40 : hoursLeft < 6 ? 30 : hoursLeft < 12 ? 20 : hoursLeft < 24 ? 10 : 0;
+
+  // Engagement: votes matter more as userbase grows
+  const engagement = votes * 5;
+
+  return freshness + urgency + engagement;
+}
+
+function renderTrendingFeed(predictions) {
+  const sportCats = PARENT_CATS.sport;
+  const newsCats = PARENT_CATS.news;
+  const entertainmentCats = PARENT_CATS.entertainment;
+
+  // Score all predictions
+  const scored = predictions.map(p => ({ ...p, hotScore: getHotScore(p) }));
+
+  // Split by section
+  const sportPreds = scored.filter(p => sportCats.includes(p.category));
+  const cryptoPreds = scored.filter(p => p.category === 'crypto');
+  const newsPreds = scored.filter(p => newsCats.includes(p.category));
+  const entertainmentPreds = scored.filter(p => entertainmentCats.includes(p.category));
+
+  // Sort each section by hot score
+  sportPreds.sort((a, b) => b.hotScore - a.hotScore);
+  cryptoPreds.sort((a, b) => b.hotScore - a.hotScore);
+  newsPreds.sort((a, b) => b.hotScore - a.hotScore);
+  entertainmentPreds.sort((a, b) => b.hotScore - a.hotScore);
+
+  // Top picks across all categories
+  const allScored = [...scored].sort((a, b) => b.hotScore - a.hotScore);
+  // Pick top 5 but ensure variety (max 2 per parent category)
+  const hotPicks = [];
+  const hotCounts = { sport: 0, crypto: 0, news: 0, entertainment: 0 };
+  for (const p of allScored) {
+    if (hotPicks.length >= 5) break;
+    const parent = sportCats.includes(p.category) ? 'sport' :
+                   p.category === 'crypto' ? 'crypto' :
+                   newsCats.includes(p.category) ? 'news' : 'entertainment';
+    if (hotCounts[parent] < 2) {
+      hotPicks.push(p);
+      hotCounts[parent]++;
+    }
+  }
+
+  // Build the feed
+  let html = '';
+
+  // Section: HOT RIGHT NOW
+  if (hotPicks.length > 0) {
+    html += renderSection('🔥 HOT RIGHT NOW', hotPicks);
+  }
+
+  // Section: TRENDING SPORT
+  if (sportPreds.length > 0) {
+    html += renderSection('🏆 TRENDING SPORT', sportPreds.slice(0, 5));
+  }
+
+  // Section: TRENDING CRYPTO
+  if (cryptoPreds.length > 0) {
+    html += renderSection('₿ TRENDING CRYPTO', cryptoPreds.slice(0, 5));
+  }
+
+  // Section: TRENDING NEWS
+  if (newsPreds.length > 0) {
+    html += renderSection('📰 TRENDING NEWS', newsPreds.slice(0, 5));
+  }
+
+  // Section: TRENDING ENTERTAINMENT
+  if (entertainmentPreds.length > 0) {
+    html += renderSection('🎭 TRENDING ENTERTAINMENT', entertainmentPreds.slice(0, 5));
+  }
+
+  if (html === '') {
+    return '<div class="empty-state"><div class="emoji">🔮</div><p>No predictions yet</p></div>';
+  }
+
+  return html;
+}
+
+function renderSection(title, preds) {
+  let html = `
+    <div class="league-header">
+      <span class="league-header-line"></span>
+      <span class="league-header-name">${title}</span>
+      <span class="league-header-line"></span>
+    </div>`;
+  html += preds.map(p => renderPrediction(p)).join('');
+  return html;
 }
 
 function renderGroupedByLeague(predictions) {
