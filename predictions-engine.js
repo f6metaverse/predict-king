@@ -2272,20 +2272,25 @@ async function generateWWELive() {
   try {
     if (!NEWS_API_KEY) return predictions;
 
-    // Step 1: Find current/next PLE
+    // Step 1: Find current/next PLE — prioritize mega events (WrestleMania, SummerSlam)
     const now = new Date();
     let nextPLE = null;
+    const upcomingPLEs = [];
     for (const ple of WWE_PLE_CALENDAR_2026) {
       const pleDate = new Date(Date.UTC(2026, ple.month - 1, ple.day, 23, 59));
       const daysUntil = (pleDate - now) / 86400000;
-      if (daysUntil > -1 && daysUntil <= 21) { // Within 3 weeks
-        nextPLE = { ...ple, date: pleDate, daysUntil: Math.ceil(daysUntil) };
-        break;
+      if (daysUntil > -1 && daysUntil <= 28) {
+        upcomingPLEs.push({ ...ple, date: pleDate, daysUntil: Math.ceil(daysUntil) });
       }
     }
+    // Prefer mega > major > nxt when multiple PLEs are in range
+    const megaPLE = upcomingPLEs.find(p => p.tier === 'mega');
+    const majorPLE = upcomingPLEs.find(p => p.tier === 'major');
+    nextPLE = megaPLE || majorPLE || upcomingPLEs[0] || null;
 
     // Step 2: Fetch WWE news
-    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=entertainment,sports&qInTitle=WWE%20OR%20WrestleMania%20OR%20SmackDown%20OR%20Raw%20wrestling%20OR%20${nextPLE ? encodeURIComponent(nextPLE.name) : 'SummerSlam'}&removeduplicate=1`;
+    const pleSearch = nextPLE ? encodeURIComponent(nextPLE.name) : 'SummerSlam';
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=entertainment,sports&qInTitle=WWE%20OR%20WrestleMania%20OR%20SmackDown%20OR%20Raw%20OR%20wrestling%20OR%20${pleSearch}&removeduplicate=1`;
     const res = await fetch(url);
     const data = await res.json();
 
