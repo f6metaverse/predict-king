@@ -1157,6 +1157,352 @@ async function generateF1Live() {
   return predictions;
 }
 
+// ============================================
+// FOOTBALL STORYLINE GENERATOR (News-powered)
+// Transfers, title races, Ballon d'Or, manager drama
+// Complements match predictions from API-Sports
+// ============================================
+
+const FOOTBALL_STARS = [
+  // Ballon d'Or contenders 2026
+  { name: 'Mbappé', full: 'Kylian Mbappé', club: 'Real Madrid' },
+  { name: 'Yamal', full: 'Lamine Yamal', club: 'Barcelona' },
+  { name: 'Haaland', full: 'Erling Haaland', club: 'Man City' },
+  { name: 'Kane', full: 'Harry Kane', club: 'Bayern Munich' },
+  { name: 'Vinicius', full: 'Vinicius Jr', club: 'Real Madrid' },
+  { name: 'Dembélé', full: 'Ousmane Dembélé', club: 'PSG' },
+  { name: 'Olise', full: 'Michael Olise', club: 'Bayern Munich' },
+  { name: 'Bellingham', full: 'Jude Bellingham', club: 'Real Madrid' },
+  { name: 'Salah', full: 'Mohamed Salah', club: 'Liverpool' },
+  { name: 'Palmer', full: 'Cole Palmer', club: 'Chelsea' },
+  { name: 'Saka', full: 'Bukayo Saka', club: 'Arsenal' },
+  { name: 'Messi', full: 'Lionel Messi', club: 'Inter Miami' },
+  { name: 'Ronaldo', full: 'Cristiano Ronaldo', club: 'Al Nassr' },
+  { name: 'De Bruyne', full: 'Kevin De Bruyne', club: 'Man City' },
+  { name: 'Pedri', full: 'Pedri', club: 'Barcelona' },
+  { name: 'Rice', full: 'Declan Rice', club: 'Arsenal' },
+  { name: 'Rodri', full: 'Rodri', club: 'Man City' },
+  { name: 'Lewandowski', full: 'Robert Lewandowski', club: 'Barcelona' },
+  { name: 'Osimhen', full: 'Victor Osimhen', club: 'Galatasaray' },
+  { name: 'Wirtz', full: 'Florian Wirtz', club: 'Bayer Leverkusen' },
+];
+
+const FOOTBALL_CLUBS = [
+  'Real Madrid', 'Barcelona', 'Man City', 'Liverpool', 'Arsenal', 'Chelsea',
+  'Bayern Munich', 'PSG', 'Inter Milan', 'Juventus', 'Dortmund', 'Atletico Madrid',
+  'Napoli', 'Leverkusen', 'Man United', 'Tottenham', 'Newcastle', 'AC Milan'
+];
+
+// Storyline detection keywords
+const TRANSFER_KW = ['transfer', 'signing', 'signs', 'joins', 'deal', 'bid', 'offer', 'leaving', 'exit', 'departure', 'release clause', 'contract', 'free agent'];
+const TITLE_RACE_KW = ['title race', 'championship', 'league title', 'top of the table', 'title contender', 'clinch'];
+const AWARD_KW = ['ballon d\'or', 'golden boot', 'best player', 'player of the year', 'fifa best', 'the best award'];
+const MANAGER_KW = ['sacked', 'fired', 'appointed', 'new manager', 'new coach', 'resigns', 'leaves post', 'interim'];
+const UCL_KW = ['champions league', 'ucl', 'european cup', 'semifinal', 'quarterfinal', 'draw'];
+const WORLD_CUP_KW = ['world cup', 'world cup 2026', 'qualification', 'national team', 'international'];
+
+async function generateFootballStorylines() {
+  const predictions = [];
+  try {
+    if (!NEWS_API_KEY) return predictions;
+
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=sports&qInTitle=Premier%20League%20OR%20Champions%20League%20OR%20La%20Liga%20OR%20transfer%20OR%20Ballon%20d%27Or%20OR%20World%20Cup%20OR%20Mbappe%20OR%20Haaland&removeduplicate=1`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    const articles = (data.results || []).filter(a => a.title && a.title.length >= 15);
+    console.log(`    Football storylines: ${articles.length} articles found`);
+
+    if (articles.length === 0) return predictions;
+
+    // Parse player mentions
+    const playerMentions = {};
+    for (const player of FOOTBALL_STARS) {
+      const nameLC = player.name.toLowerCase();
+      let count = 0;
+      for (const article of articles) {
+        const text = `${article.title} ${article.description || ''} ${(article.keywords || []).join(' ')}`.toLowerCase();
+        if (text.includes(nameLC)) count++;
+      }
+      if (count > 0) playerMentions[player.name] = { ...player, count };
+    }
+    const topPlayers = Object.values(playerMentions).sort((a, b) => b.count - a.count);
+
+    // Parse club mentions
+    const clubMentions = {};
+    for (const club of FOOTBALL_CLUBS) {
+      const clubLC = club.toLowerCase();
+      let count = 0;
+      for (const article of articles) {
+        const text = `${article.title} ${article.description || ''} ${(article.keywords || []).join(' ')}`.toLowerCase();
+        if (text.includes(clubLC)) count++;
+      }
+      if (count > 0) clubMentions[club] = count;
+    }
+    const topClubs = Object.entries(clubMentions).sort((a, b) => b[1] - a[1]).map(([name]) => name);
+
+    // Detect storylines
+    const allText = articles.map(a => `${a.title} ${a.description || ''}`).join(' ').toLowerCase();
+    const hasTransfer = TRANSFER_KW.some(kw => allText.includes(kw));
+    const hasTitleRace = TITLE_RACE_KW.some(kw => allText.includes(kw));
+    const hasAward = AWARD_KW.some(kw => allText.includes(kw));
+    const hasManager = MANAGER_KW.some(kw => allText.includes(kw));
+    const hasUCL = UCL_KW.some(kw => allText.includes(kw));
+    const hasWorldCup = WORLD_CUP_KW.some(kw => allText.includes(kw));
+
+    console.log(`    Football: Top players: ${topPlayers.slice(0, 5).map(p => p.name).join(', ')}`);
+    console.log(`    Football: Storylines: ${[hasTransfer && 'transfer', hasTitleRace && 'title', hasAward && 'award', hasManager && 'manager', hasUCL && 'UCL', hasWorldCup && 'WC'].filter(Boolean).join(', ') || 'none'}`);
+
+    const baseMeta = { apiType: 'football-storyline', source: 'newsdata' };
+
+    // --- Transfer prediction ---
+    if (hasTransfer && topPlayers.length >= 1) {
+      const transferPlayer = topPlayers.find(p =>
+        articles.some(a => {
+          const t = `${a.title} ${a.description || ''}`.toLowerCase();
+          return t.includes(p.name.toLowerCase()) && TRANSFER_KW.some(kw => t.includes(kw));
+        })
+      ) || topPlayers[0];
+
+      predictions.push({
+        question: `⚽ Transfer: ${transferPlayer.full} leaves ${transferPlayer.club} this summer?`,
+        optionA: 'YES — He\'s gone', optionB: 'NO — Stays put',
+        category: 'football', emoji: '⚽',
+        expiresAt: expiresInHours(72),
+        metadata: { ...baseMeta, predType: 'transfer', player: transferPlayer.full }
+      });
+    }
+
+    // --- Title race prediction ---
+    if (hasTitleRace && topClubs.length >= 2) {
+      predictions.push({
+        question: `⚽ Title race: ${topClubs[0]} vs ${topClubs[1]} — Who wins the league?`,
+        optionA: topClubs[0], optionB: topClubs[1],
+        category: 'football', emoji: '⚽',
+        expiresAt: expiresInHours(120),
+        metadata: { ...baseMeta, predType: 'title_race', club1: topClubs[0], club2: topClubs[1] }
+      });
+    }
+
+    // --- Ballon d'Or / Award prediction ---
+    if (hasAward && topPlayers.length >= 2) {
+      predictions.push({
+        question: `⚽ Ballon d'Or 2026: ${topPlayers[0].full} or ${topPlayers[1].full}?`,
+        optionA: topPlayers[0].name, optionB: topPlayers[1].name,
+        category: 'football', emoji: '⚽',
+        expiresAt: expiresInHours(120),
+        metadata: { ...baseMeta, predType: 'award', player1: topPlayers[0].full, player2: topPlayers[1].full }
+      });
+    }
+
+    // --- Champions League prediction ---
+    if (hasUCL && topClubs.length >= 2) {
+      predictions.push({
+        question: `⚽ Champions League: ${topClubs[0]} vs ${topClubs[1]} — Who goes further?`,
+        optionA: topClubs[0], optionB: topClubs[1],
+        category: 'football', emoji: '⚽',
+        expiresAt: expiresInHours(120),
+        metadata: { ...baseMeta, predType: 'ucl', club1: topClubs[0], club2: topClubs[1] }
+      });
+    }
+
+    // --- Manager drama ---
+    if (hasManager) {
+      predictions.push({
+        question: `⚽ Next top manager to be sacked?`,
+        optionA: topClubs.length >= 2 ? topClubs[1] + ' coach' : 'Premier League', optionB: topClubs.length >= 3 ? topClubs[2] + ' coach' : 'La Liga/Serie A',
+        category: 'football', emoji: '⚽',
+        expiresAt: expiresInHours(72),
+        metadata: { ...baseMeta, predType: 'manager_sacked' }
+      });
+    }
+
+    // --- World Cup 2026 ---
+    if (hasWorldCup && topPlayers.length >= 1) {
+      predictions.push({
+        question: `⚽ World Cup 2026: ${topPlayers[0].full} — Golden Boot winner?`,
+        optionA: 'YES — Top scorer', optionB: 'NO — Someone else',
+        category: 'football', emoji: '⚽',
+        expiresAt: expiresInHours(120),
+        metadata: { ...baseMeta, predType: 'world_cup', player: topPlayers[0].full }
+      });
+    }
+
+    // --- Always: hot player debate ---
+    if (topPlayers.length >= 2 && predictions.length < 2) {
+      predictions.push({
+        question: `⚽ Best player in the world right now: ${topPlayers[0].full} or ${topPlayers[1].full}?`,
+        optionA: topPlayers[0].name, optionB: topPlayers[1].name,
+        category: 'football', emoji: '⚽',
+        expiresAt: expiresInHours(72),
+        metadata: { ...baseMeta, predType: 'best_player', player1: topPlayers[0].full, player2: topPlayers[1].full }
+      });
+    }
+
+    console.log(`    Football storylines: ${predictions.length} predictions generated`);
+  } catch (e) {
+    console.error('Football storylines error:', e.message);
+  }
+  return predictions;
+}
+
+// ============================================
+// NBA STORYLINE GENERATOR (News-powered)
+// MVP race, trades, playoffs, records
+// Complements match predictions from API-Sports
+// ============================================
+
+const NBA_STARS = [
+  { name: 'Wembanyama', full: 'Victor Wembanyama', team: 'Spurs' },
+  { name: 'SGA', full: 'Shai Gilgeous-Alexander', team: 'Thunder' },
+  { name: 'Jokic', full: 'Nikola Jokic', team: 'Nuggets' },
+  { name: 'Luka', full: 'Luka Doncic', team: 'Lakers' },
+  { name: 'Jaylen Brown', full: 'Jaylen Brown', team: 'Celtics' },
+  { name: 'Tatum', full: 'Jayson Tatum', team: 'Celtics' },
+  { name: 'Giannis', full: 'Giannis Antetokounmpo', team: 'Bucks' },
+  { name: 'Curry', full: 'Stephen Curry', team: 'Warriors' },
+  { name: 'LeBron', full: 'LeBron James', team: 'Lakers' },
+  { name: 'Durant', full: 'Kevin Durant', team: 'Suns' },
+  { name: 'Edwards', full: 'Anthony Edwards', team: 'Timberwolves' },
+  { name: 'Brunson', full: 'Jalen Brunson', team: 'Knicks' },
+  { name: 'Cade', full: 'Cade Cunningham', team: 'Pistons' },
+  { name: 'Embiid', full: 'Joel Embiid', team: '76ers' },
+  { name: 'Morant', full: 'Ja Morant', team: 'Grizzlies' },
+];
+
+const NBA_TEAMS = [
+  'Lakers', 'Celtics', 'Warriors', 'Thunder', 'Spurs', 'Nuggets',
+  'Bucks', 'Knicks', 'Suns', '76ers', 'Heat', 'Timberwolves',
+  'Grizzlies', 'Mavericks', 'Cavaliers', 'Pistons'
+];
+
+const NBA_MVP_KW = ['mvp', 'most valuable', 'mvp race', 'mvp candidate', 'mvp ladder'];
+const NBA_TRADE_KW = ['trade', 'traded', 'deal', 'blockbuster', 'package', 'swap'];
+const NBA_PLAYOFF_KW = ['playoff', 'playoffs', 'postseason', 'play-in', 'seed', 'clinch'];
+const NBA_RECORD_KW = ['record', 'historic', 'all-time', 'triple-double', 'scoring title'];
+
+async function generateNBAStorylines() {
+  const predictions = [];
+  try {
+    if (!NEWS_API_KEY) return predictions;
+
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=sports&qInTitle=NBA%20OR%20basketball%20OR%20Lakers%20OR%20Celtics%20OR%20MVP&removeduplicate=1`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    const articles = (data.results || []).filter(a => a.title && a.title.length >= 15);
+    console.log(`    NBA storylines: ${articles.length} articles found`);
+
+    if (articles.length === 0) return predictions;
+
+    // Parse player mentions
+    const playerMentions = {};
+    for (const player of NBA_STARS) {
+      const nameLC = player.name.toLowerCase();
+      const fullLC = player.full.toLowerCase();
+      const lastNameLC = player.full.split(' ').pop().toLowerCase();
+      let count = 0;
+      for (const article of articles) {
+        const text = `${article.title} ${article.description || ''} ${(article.keywords || []).join(' ')}`.toLowerCase();
+        if (text.includes(nameLC) || text.includes(fullLC) || text.includes(lastNameLC)) count++;
+      }
+      if (count > 0) playerMentions[player.name] = { ...player, count };
+    }
+    const topPlayers = Object.values(playerMentions).sort((a, b) => b.count - a.count);
+
+    // Parse team mentions
+    const teamMentions = {};
+    for (const team of NBA_TEAMS) {
+      const teamLC = team.toLowerCase();
+      let count = 0;
+      for (const article of articles) {
+        const text = `${article.title} ${article.description || ''} ${(article.keywords || []).join(' ')}`.toLowerCase();
+        if (text.includes(teamLC)) count++;
+      }
+      if (count > 0) teamMentions[team] = count;
+    }
+    const topTeams = Object.entries(teamMentions).sort((a, b) => b[1] - a[1]).map(([name]) => name);
+
+    // Detect storylines
+    const allText = articles.map(a => `${a.title} ${a.description || ''}`).join(' ').toLowerCase();
+    const hasMVP = NBA_MVP_KW.some(kw => allText.includes(kw));
+    const hasTrade = NBA_TRADE_KW.some(kw => allText.includes(kw));
+    const hasPlayoff = NBA_PLAYOFF_KW.some(kw => allText.includes(kw));
+    const hasRecord = NBA_RECORD_KW.some(kw => allText.includes(kw));
+
+    console.log(`    NBA: Top players: ${topPlayers.slice(0, 5).map(p => p.name).join(', ')}`);
+
+    const baseMeta = { apiType: 'nba-storyline', source: 'newsdata' };
+
+    // --- MVP race ---
+    if (hasMVP && topPlayers.length >= 2) {
+      predictions.push({
+        question: `🏀 NBA MVP 2026: ${topPlayers[0].full} or ${topPlayers[1].full}?`,
+        optionA: topPlayers[0].name, optionB: topPlayers[1].name,
+        category: 'nba', emoji: '🏀',
+        expiresAt: expiresInHours(120),
+        metadata: { ...baseMeta, predType: 'mvp', player1: topPlayers[0].full, player2: topPlayers[1].full }
+      });
+    }
+
+    // --- Trade bomb ---
+    if (hasTrade && topPlayers.length >= 1) {
+      const tradePlayer = topPlayers.find(p =>
+        articles.some(a => {
+          const t = `${a.title} ${a.description || ''}`.toLowerCase();
+          return t.includes(p.name.toLowerCase()) && NBA_TRADE_KW.some(kw => t.includes(kw));
+        })
+      ) || topPlayers[0];
+
+      predictions.push({
+        question: `🏀 NBA Trade: ${tradePlayer.full} gets traded before the deadline?`,
+        optionA: 'YES — He\'s gone', optionB: 'NO — Stays put',
+        category: 'nba', emoji: '🏀',
+        expiresAt: expiresInHours(72),
+        metadata: { ...baseMeta, predType: 'trade', player: tradePlayer.full }
+      });
+    }
+
+    // --- Playoff predictions ---
+    if (hasPlayoff && topTeams.length >= 2) {
+      predictions.push({
+        question: `🏀 NBA Playoffs: ${topTeams[0]} vs ${topTeams[1]} — Who wins the series?`,
+        optionA: topTeams[0], optionB: topTeams[1],
+        category: 'nba', emoji: '🏀',
+        expiresAt: expiresInHours(120),
+        metadata: { ...baseMeta, predType: 'playoff_series', team1: topTeams[0], team2: topTeams[1] }
+      });
+    }
+
+    // --- Championship prediction ---
+    if (topTeams.length >= 2) {
+      predictions.push({
+        question: `🏀 NBA Champion 2026: ${topTeams[0]} or ${topTeams[1]}?`,
+        optionA: topTeams[0], optionB: topTeams[1],
+        category: 'nba', emoji: '🏀',
+        expiresAt: expiresInHours(120),
+        metadata: { ...baseMeta, predType: 'champion', team1: topTeams[0], team2: topTeams[1] }
+      });
+    }
+
+    // --- Hot player debate ---
+    if (topPlayers.length >= 2 && predictions.length < 2) {
+      predictions.push({
+        question: `🏀 NBA: ${topPlayers[0].full} vs ${topPlayers[1].full} — Who's better right now?`,
+        optionA: topPlayers[0].name, optionB: topPlayers[1].name,
+        category: 'nba', emoji: '🏀',
+        expiresAt: expiresInHours(72),
+        metadata: { ...baseMeta, predType: 'debate', player1: topPlayers[0].full, player2: topPlayers[1].full }
+      });
+    }
+
+    console.log(`    NBA storylines: ${predictions.length} predictions generated`);
+  } catch (e) {
+    console.error('NBA storylines error:', e.message);
+  }
+  return predictions;
+}
+
 async function generateRugbyLive() {
   const predictions = [];
   try {
@@ -2766,13 +3112,21 @@ async function liveSportsRefresh(active, counts) {
     { name: 'tennis', generator: generateTennisLive, minSlots: 5 },
     { name: 'boxing', generator: generateBoxingLive, minSlots: 4 },
     { name: 'wwe', generator: generateWWELive, minSlots: 4 },
+    { name: 'football_storylines', generator: generateFootballStorylines, minSlots: 2 },
+    { name: 'nba_storylines', generator: generateNBAStorylines, minSlots: 2 },
   ];
 
   for (const sport of liveSports) {
-    const currentCount = counts[sport.name] || 0;
+    // For storyline generators, count only storyline predictions (not match predictions)
+    let currentCount;
+    if (sport.name.includes('_storylines')) {
+      const cat = sport.name.replace('_storylines', '');
+      currentCount = active.filter(p => p.category === cat && p.metadata?.apiType?.includes('storyline')).length;
+    } else {
+      currentCount = counts[sport.name] || 0;
+    }
 
-    // Only refresh if we're below minimum or predictions are getting stale
-    // This prevents flooding with duplicates
+    // Only refresh if we're below minimum
     if (currentCount < sport.minSlots) {
       try {
         const preds = await sport.generator();
