@@ -282,7 +282,7 @@ function renderPrediction(p) {
   const catLabels = {
     football: '⚽ Football',
     nba: '🏀 NBA',
-    combat: '🥊 Combat',
+    combat: '🥊 UFC/MMA',
     f1: '🏎️ F1',
     nfl: '🏈 NFL',
     hockey: '🏒 NHL',
