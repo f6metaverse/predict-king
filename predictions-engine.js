@@ -65,6 +65,7 @@ const MIN_SLOTS = {
   combat: 5,
   f1: 4,
   motogp: 4,
+  tennis: 5,
   nfl: 4,
   hockey: 6,
   rugby: 3,
@@ -1252,6 +1253,282 @@ async function generateRugbyLive() {
 }
 
 // ============================================
+// TENNIS NEWS-POWERED GENERATOR
+// Grand Slams (2 weeks) + Masters 1000 (1-2 weeks)
+// ATP + WTA combined for max engagement
+// ============================================
+
+// 2026 Tennis calendar — Grand Slams + Masters 1000
+const TENNIS_CALENDAR_2026 = [
+  // Grand Slams (2 weeks each)
+  { name: 'Australian Open', city: 'Melbourne', startMonth: 1, startDay: 12, endMonth: 2, endDay: 1, tier: 'slam' },
+  { name: 'Roland-Garros', city: 'Paris', startMonth: 5, startDay: 24, endMonth: 6, endDay: 7, tier: 'slam' },
+  { name: 'Wimbledon', city: 'London', startMonth: 6, startDay: 29, endMonth: 7, endDay: 12, tier: 'slam' },
+  { name: 'US Open', city: 'New York', startMonth: 8, startDay: 31, endMonth: 9, endDay: 13, tier: 'slam' },
+  // Masters 1000
+  { name: 'Indian Wells Masters', city: 'Indian Wells', startMonth: 3, startDay: 4, endMonth: 3, endDay: 15, tier: 'masters' },
+  { name: 'Miami Open', city: 'Miami', startMonth: 3, startDay: 18, endMonth: 3, endDay: 29, tier: 'masters' },
+  { name: 'Monte-Carlo Masters', city: 'Monte-Carlo', startMonth: 4, startDay: 5, endMonth: 4, endDay: 12, tier: 'masters' },
+  { name: 'Madrid Open', city: 'Madrid', startMonth: 4, startDay: 22, endMonth: 5, endDay: 3, tier: 'masters' },
+  { name: 'Italian Open', city: 'Rome', startMonth: 5, startDay: 6, endMonth: 5, endDay: 17, tier: 'masters' },
+  { name: 'Canadian Open', city: 'Montreal', startMonth: 8, startDay: 2, endMonth: 8, endDay: 12, tier: 'masters' },
+  { name: 'Cincinnati Open', city: 'Cincinnati', startMonth: 8, startDay: 13, endMonth: 8, endDay: 23, tier: 'masters' },
+  { name: 'Shanghai Masters', city: 'Shanghai', startMonth: 10, startDay: 7, endMonth: 10, endDay: 18, tier: 'masters' },
+  { name: 'Paris Masters', city: 'Paris', startMonth: 11, startDay: 2, endMonth: 11, endDay: 8, tier: 'masters' },
+];
+
+// Top ATP players (March 2026 rankings)
+const ATP_PLAYERS = [
+  { name: 'Alcaraz', full: 'Carlos Alcaraz', country: '🇪🇸' },
+  { name: 'Sinner', full: 'Jannik Sinner', country: '🇮🇹' },
+  { name: 'Djokovic', full: 'Novak Djokovic', country: '🇷🇸' },
+  { name: 'Zverev', full: 'Alexander Zverev', country: '🇩🇪' },
+  { name: 'Musetti', full: 'Lorenzo Musetti', country: '🇮🇹' },
+  { name: 'De Minaur', full: 'Alex De Minaur', country: '🇦🇺' },
+  { name: 'Fritz', full: 'Taylor Fritz', country: '🇺🇸' },
+  { name: 'Auger-Aliassime', full: 'Felix Auger-Aliassime', country: '🇨🇦' },
+  { name: 'Shelton', full: 'Ben Shelton', country: '🇺🇸' },
+  { name: 'Medvedev', full: 'Daniil Medvedev', country: '🇷🇺' },
+  { name: 'Bublik', full: 'Alexander Bublik', country: '🇰🇿' },
+  { name: 'Ruud', full: 'Casper Ruud', country: '🇳🇴' },
+  { name: 'Mensik', full: 'Jakub Mensik', country: '🇨🇿' },
+  { name: 'Rublev', full: 'Andrey Rublev', country: '🇷🇺' },
+  { name: 'Tiafoe', full: 'Frances Tiafoe', country: '🇺🇸' },
+];
+
+// Top WTA players (March 2026 rankings)
+const WTA_PLAYERS = [
+  { name: 'Sabalenka', full: 'Aryna Sabalenka', country: '🇧🇾' },
+  { name: 'Rybakina', full: 'Elena Rybakina', country: '🇰🇿' },
+  { name: 'Swiatek', full: 'Iga Swiatek', country: '🇵🇱' },
+  { name: 'Gauff', full: 'Coco Gauff', country: '🇺🇸' },
+  { name: 'Pegula', full: 'Jessica Pegula', country: '🇺🇸' },
+  { name: 'Paolini', full: 'Jasmine Paolini', country: '🇮🇹' },
+  { name: 'Andreeva', full: 'Mirra Andreeva', country: '🇷🇺' },
+  { name: 'Osaka', full: 'Naomi Osaka', country: '🇯🇵' },
+  { name: 'Muchova', full: 'Karolina Muchova', country: '🇨🇿' },
+  { name: 'Keys', full: 'Madison Keys', country: '🇺🇸' },
+];
+
+const ALL_TENNIS_PLAYERS = [...ATP_PLAYERS, ...WTA_PLAYERS];
+
+const TENNIS_ALIASES = {
+  'Australian Open': ['australian open', 'melbourne', 'aus open'],
+  'Roland-Garros': ['roland garros', 'french open', 'roland-garros', 'paris'],
+  'Wimbledon': ['wimbledon'],
+  'US Open': ['us open', 'flushing meadows', 'new york'],
+  'Indian Wells': ['indian wells', 'bnp paribas'],
+  'Miami Open': ['miami open'],
+  'Monte-Carlo': ['monte carlo', 'monte-carlo', 'rolex masters'],
+  'Madrid Open': ['madrid open', 'mutua madrid'],
+  'Italian Open': ['italian open', 'rome masters', 'internazionali'],
+  'Canadian Open': ['canadian open', 'national bank open', 'montreal'],
+  'Cincinnati': ['cincinnati open', 'western southern'],
+  'Shanghai': ['shanghai masters', 'rolex shanghai'],
+  'Paris Masters': ['paris masters', 'bercy'],
+};
+
+async function generateTennisLive() {
+  const predictions = [];
+  try {
+    if (!NEWS_API_KEY) return predictions;
+
+    // Step 1: Find the current or next upcoming tournament
+    const now = new Date();
+    let activeTournament = null;
+
+    // First check if we're currently IN a tournament
+    for (const t of TENNIS_CALENDAR_2026) {
+      const start = new Date(Date.UTC(2026, t.startMonth - 1, t.startDay));
+      const end = new Date(Date.UTC(2026, t.endMonth - 1, t.endDay, 23, 59));
+      if (now >= start && now <= end) {
+        activeTournament = { ...t, isLive: true, endDate: end };
+        break;
+      }
+    }
+
+    // If no active tournament, find the next one within 14 days
+    if (!activeTournament) {
+      for (const t of TENNIS_CALENDAR_2026) {
+        const start = new Date(Date.UTC(2026, t.startMonth - 1, t.startDay));
+        const daysUntil = (start - now) / 86400000;
+        if (daysUntil > 0 && daysUntil <= 14) {
+          activeTournament = { ...t, isLive: false, endDate: new Date(Date.UTC(2026, t.endMonth - 1, t.endDay, 23, 59)) };
+          break;
+        }
+      }
+    }
+
+    if (!activeTournament) {
+      console.log('    Tennis: No active or upcoming tournament within 14 days');
+      return predictions;
+    }
+
+    const tournamentName = activeTournament.name;
+    const expiry = activeTournament.endDate.toISOString();
+    const tier = activeTournament.tier;
+
+    console.log(`    Tennis: ${activeTournament.isLive ? 'LIVE' : 'Upcoming'} — ${tournamentName} (${tier})`);
+
+    // Step 2: Fetch tennis news
+    const searchTerms = encodeURIComponent(tournamentName.replace(/-/g, ' '));
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=sports&qInTitle=tennis%20OR%20${searchTerms}%20OR%20ATP%20OR%20WTA&removeduplicate=1`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    const articles = (data.results || []).filter(a => a.title && a.title.length >= 15);
+    console.log(`    Tennis: ${articles.length} news articles found`);
+
+    // Step 3: Parse player mentions
+    const playerMentions = {};
+
+    for (const player of ALL_TENNIS_PLAYERS) {
+      const lastNameLC = player.full.split(' ').pop().toLowerCase();
+      const nameLC = player.name.toLowerCase();
+      let count = 0;
+      for (const article of articles) {
+        const text = `${article.title} ${article.description || ''} ${(article.keywords || []).join(' ')}`.toLowerCase();
+        if (text.includes(lastNameLC) || text.includes(nameLC)) count++;
+      }
+      if (count > 0) playerMentions[player.name] = { ...player, count };
+    }
+
+    const topPlayers = Object.values(playerMentions).sort((a, b) => b.count - a.count);
+    // Split ATP and WTA top players
+    const topATP = topPlayers.filter(p => ATP_PLAYERS.some(a => a.name === p.name));
+    const topWTA = topPlayers.filter(p => WTA_PLAYERS.some(w => w.name === p.name));
+
+    console.log(`    Tennis: Top ATP: ${topATP.slice(0, 5).map(p => `${p.name}(${p.count})`).join(', ')}`);
+    console.log(`    Tennis: Top WTA: ${topWTA.slice(0, 3).map(p => `${p.name}(${p.count})`).join(', ')}`);
+
+    const prefix = tier === 'slam' ? '🎾 Grand Slam' : '🎾';
+    const baseMetadata = {
+      apiType: 'tennis',
+      source: 'newsdata',
+      tournament: tournamentName,
+      tier,
+      endDate: expiry
+    };
+
+    // Step 4: Generate predictions
+
+    // --- ATP Head-to-head ---
+    if (topATP.length >= 2) {
+      predictions.push({
+        question: `${prefix} ${tournamentName}: ${topATP[0].full} ${topATP[0].country} vs ${topATP[1].full} ${topATP[1].country} — Who goes further?`,
+        optionA: topATP[0].name, optionB: topATP[1].name,
+        category: 'tennis', emoji: '🎾',
+        expiresAt: expiry,
+        metadata: { ...baseMetadata, predType: 'atp_head_to_head', player1: topATP[0].full, player2: topATP[1].full }
+      });
+    }
+
+    // --- WTA Head-to-head ---
+    if (topWTA.length >= 2) {
+      predictions.push({
+        question: `${prefix} ${tournamentName}: ${topWTA[0].full} ${topWTA[0].country} vs ${topWTA[1].full} ${topWTA[1].country} — Who goes further?`,
+        optionA: topWTA[0].name, optionB: topWTA[1].name,
+        category: 'tennis', emoji: '🎾',
+        expiresAt: expiry,
+        metadata: { ...baseMetadata, predType: 'wta_head_to_head', player1: topWTA[0].full, player2: topWTA[1].full }
+      });
+    }
+
+    // --- ATP Title prediction ---
+    if (topATP.length >= 1) {
+      predictions.push({
+        question: `${prefix} ${tournamentName}: ${topATP[0].full} wins the title?`,
+        optionA: `YES — ${topATP[0].name} champion`, optionB: 'NO — Someone else',
+        category: 'tennis', emoji: '🎾',
+        expiresAt: expiry,
+        metadata: { ...baseMetadata, predType: 'atp_title', player: topATP[0].full }
+      });
+    }
+
+    // --- WTA Title prediction ---
+    if (topWTA.length >= 1) {
+      predictions.push({
+        question: `${prefix} ${tournamentName}: ${topWTA[0].full} wins the title?`,
+        optionA: `YES — ${topWTA[0].name} champion`, optionB: 'NO — Someone else',
+        category: 'tennis', emoji: '🎾',
+        expiresAt: expiry,
+        metadata: { ...baseMetadata, predType: 'wta_title', player: topWTA[0].full }
+      });
+    }
+
+    // --- Upset / Dark horse (3rd-5th ranked mentioned player) ---
+    if (topATP.length >= 3) {
+      const darkHorse = topATP[2];
+      predictions.push({
+        question: `${prefix} ${tournamentName}: ${darkHorse.full} ${darkHorse.country} — Semifinal or better?`,
+        optionA: 'YES — Deep run', optionB: 'NO — Early exit',
+        category: 'tennis', emoji: '🎾',
+        expiresAt: expiry,
+        metadata: { ...baseMetadata, predType: 'dark_horse', player: darkHorse.full }
+      });
+    }
+
+    // --- Grand Slam bonus predictions (bigger events = more predictions) ---
+    if (tier === 'slam') {
+      // Upset alert
+      predictions.push({
+        question: `${prefix} ${tournamentName}: Major upset in the first week? (Top 5 seed eliminated)`,
+        optionA: 'YES — Chaos', optionB: 'NO — Favorites hold',
+        category: 'tennis', emoji: '🎾',
+        expiresAt: expiry,
+        metadata: { ...baseMetadata, predType: 'upset' }
+      });
+
+      // 5-setter drama (ATP only at slams)
+      predictions.push({
+        question: `${prefix} ${tournamentName}: 5-set epic in the final?`,
+        optionA: 'YES — Marathon match', optionB: 'NO — Straight sets or 4',
+        category: 'tennis', emoji: '🎾',
+        expiresAt: expiry,
+        metadata: { ...baseMetadata, predType: 'five_setter' }
+      });
+    }
+
+    // --- Match drama (always) ---
+    const dramaTemplates = [
+      { q: `${prefix} ${tournamentName}: Rain delay disrupts the schedule?`, a: 'YES', b: 'NO — Smooth tournament', type: 'rain' },
+      { q: `${prefix} ${tournamentName}: A qualifier reaches the quarterfinals?`, a: 'YES — Cinderella story', b: 'NO', type: 'qualifier' },
+      { q: `${prefix} ${tournamentName}: Retirement or walkover in a big match?`, a: 'YES', b: 'NO — All play through', type: 'retirement' },
+    ];
+    const drama = dramaTemplates[Math.floor(Math.random() * dramaTemplates.length)];
+    predictions.push({
+      question: drama.q,
+      optionA: drama.a, optionB: drama.b,
+      category: 'tennis', emoji: '🎾',
+      expiresAt: expiry,
+      metadata: { ...baseMetadata, predType: drama.type }
+    });
+
+    // Fallback if not enough players found
+    if (topPlayers.length < 2) {
+      console.log('    Tennis: Not enough player data from news, adding generic templates');
+      const fallbacks = [
+        { q: `${prefix} ${tournamentName}: Top seed wins the title?`, a: 'YES', b: 'NO — Upset in the draw', type: 'top_seed' },
+        { q: `${prefix} ${tournamentName}: New champion or defending champ?`, a: 'New champion', b: 'Defending champ repeats', type: 'new_champ' },
+      ];
+      for (const fb of fallbacks) {
+        predictions.push({
+          question: fb.q, optionA: fb.a, optionB: fb.b,
+          category: 'tennis', emoji: '🎾',
+          expiresAt: expiry,
+          metadata: { ...baseMetadata, predType: fb.type }
+        });
+      }
+    }
+
+    console.log(`    Tennis: ${predictions.length} predictions generated for ${tournamentName}`);
+  } catch (e) {
+    console.error('Tennis news engine error:', e.message);
+  }
+  return predictions;
+}
+
+// ============================================
 // MOTOGP NEWS-POWERED GENERATOR
 // Same approach as F1: parse news → extract riders → generate predictions
 // ============================================
@@ -1532,6 +1809,7 @@ const SPORT_GENERATORS = {
   combat: generateCombatLive,
   f1: generateF1Live,
   motogp: generateMotoGPLive,
+  tennis: generateTennisLive,
   rugby: generateRugbyLive,
 };
 
@@ -1939,7 +2217,7 @@ async function weeklySportsFetch(active) {
   console.log('  WEEKLY SPORTS FETCH — loading all upcoming events...');
   let totalGenerated = 0;
 
-  const allSports = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1', 'motogp'];
+  const allSports = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1', 'motogp', 'tennis'];
 
   for (const sport of allSports) {
     const generator = SPORT_GENERATORS[sport];
@@ -2033,7 +2311,7 @@ async function smartGenerate(forceWeekly = false) {
   console.log(`Total active: ${active.length}`);
 
   // --- Decide if we need a weekly sports fetch ---
-  const sportCategories = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1', 'motogp'];
+  const sportCategories = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1', 'motogp', 'tennis'];
   const totalSportPreds = sportCategories.reduce((sum, cat) => sum + (counts[cat] || 0), 0);
 
   // Only count predictions that have metadata (= generated by new engine, not old static)
@@ -2086,7 +2364,7 @@ async function startScheduler() {
 
   // On startup: always do a full weekly fetch to fill the app
   const active = await db.getActivePredictions();
-  const sportCategories = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1', 'motogp'];
+  const sportCategories = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1', 'motogp', 'tennis'];
   const totalSport = sportCategories.reduce((sum, cat) => sum + active.filter(p => p.category === cat).length, 0);
 
   if (totalSport < 10) {

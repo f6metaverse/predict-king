@@ -288,6 +288,7 @@ function renderPrediction(p) {
     hockey: '🏒 NHL',
     rugby: '🏉 Rugby',
     motogp: '🏍 MotoGP',
+    tennis: '🎾 Tennis',
     crypto: '₿ Crypto',
     musique: '🎵 Music',
     gaming: '🎮 Gaming',
