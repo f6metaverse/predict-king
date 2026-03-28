@@ -2210,16 +2210,17 @@ async function addIfNotDupe(pred, activeList) {
 }
 
 // -------------------------------------------------------------------
-// WEEKLY SPORT FETCH — big batch, called Mon + Wed only (or emergency)
-// Fetches ALL sports at once, 14 days ahead for football, 7 for others
+// WEEKLY SPORT FETCH — API-Sports only (costs quota), Monday morning
+// These sports have fixed schedules: matches don't change mid-week
 // -------------------------------------------------------------------
 async function weeklySportsFetch(active) {
-  console.log('  WEEKLY SPORTS FETCH — loading all upcoming events...');
+  console.log('  WEEKLY SPORTS FETCH — API-Sports batch (fixed-schedule sports)...');
   let totalGenerated = 0;
 
-  const allSports = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1', 'motogp', 'tennis'];
+  // Only API-Sports sports — F1, MotoGP, Tennis are in the live cycle
+  const apiSports = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat'];
 
-  for (const sport of allSports) {
+  for (const sport of apiSports) {
     const generator = SPORT_GENERATORS[sport];
     if (!generator) continue;
     try {
@@ -2242,11 +2243,57 @@ async function weeklySportsFetch(active) {
 }
 
 // -------------------------------------------------------------------
-// LIGHT CYCLE — crypto + news only (called every 3h)
-// Sports are already loaded from weekly fetch
+// LIVE SPORTS REFRESH — news-powered sports (free, runs every 3h)
+// These sports evolve constantly: news changes, tournaments progress
+// F1/MotoGP: ramp up before race weekend
+// Tennis: active during tournaments, skip when nothing happening
+// -------------------------------------------------------------------
+async function liveSportsRefresh(active, counts) {
+  let totalGenerated = 0;
+
+  const liveSports = [
+    { name: 'f1', generator: generateF1Live, minSlots: 4 },
+    { name: 'motogp', generator: generateMotoGPLive, minSlots: 4 },
+    { name: 'tennis', generator: generateTennisLive, minSlots: 5 },
+  ];
+
+  for (const sport of liveSports) {
+    const currentCount = counts[sport.name] || 0;
+
+    // Only refresh if we're below minimum or predictions are getting stale
+    // This prevents flooding with duplicates
+    if (currentCount < sport.minSlots) {
+      try {
+        const preds = await sport.generator();
+        let added = 0;
+        for (const pred of preds) {
+          if (await addIfNotDupe(pred, active)) {
+            totalGenerated++;
+            added++;
+            active.push(pred);
+          }
+        }
+        if (preds.length > 0) console.log(`  ${sport.name} live: ${preds.length} found, ${added} new added`);
+      } catch (e) {
+        console.error(`  ${sport.name} live error:`, e.message);
+      }
+    } else {
+      console.log(`  ${sport.name}: ${currentCount} active, skipping refresh`);
+    }
+  }
+
+  return totalGenerated;
+}
+
+// -------------------------------------------------------------------
+// LIGHT CYCLE — crypto + news + live sports (called every 3h)
+// Refreshes: F1, MotoGP, Tennis (news-powered) + crypto + news
 // -------------------------------------------------------------------
 async function lightCycle(active, counts) {
   let totalGenerated = 0;
+
+  // Live sports refresh (F1, MotoGP, Tennis) — news-powered, free
+  totalGenerated += await liveSportsRefresh(active, counts);
 
   // Crypto: prices change constantly, always worth refreshing
   // Count only PRICE-based crypto predictions (not news-based ones)
@@ -2359,7 +2406,8 @@ async function cleanupExpired() {
 
 async function startScheduler() {
   console.log('Prediction scheduler started');
-  console.log('  Sports: Monday morning only, 7-day lookahead (or emergency if < 5 sport preds)');
+  console.log('  API-Sports (foot, NBA, hockey, NFL, rugby, combat): Monday morning');
+  console.log('  Live sports (F1, MotoGP, Tennis): every 3h via news');
   console.log('  Crypto + News: every 3h');
 
   // On startup: always do a full weekly fetch to fill the app
