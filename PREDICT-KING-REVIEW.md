@@ -347,6 +347,20 @@ FIX : Chaque sport a un delai intelligent avant le premier check :
 
 Resultat : 1-2 appels par match au lieu de 6-12. Fallback vote majoritaire apres 8h max sans reponse API.
 
+**Ghost matches fix (28/03/2026 — meme session) :**
+
+PROBLEME : Malgre le smart delay, des matchs de ligues mineures (England U18, Doncaster vs Hartpury, Llangennech vs Ystrad Rhondda) restaient bloques en status "NS" (Not Started) sur l'API meme des heures apres le kickoff prevu. L'auto-resolve les re-checkait toutes les 30 min indefiniment → Rugby a 66% du quota pour 3 matchs fantomes. Droit dans le mur vers un 2e ban.
+
+CAUSE :
+1. L'engine generait des predictions pour des ligues inconnues (U18, amateur, divisions inferieures) mal couvertes par l'API free
+2. L'auto-resolve ne detectait pas les matchs fantomes (NS apres kickoff = l'API ne mettra jamais a jour)
+
+FIX (2 couches) :
+1. **Engine** : Football ne genere QUE pour les ligues connues (Tier 1/2/3, 36 ligues). Rugby QUE pour les top leagues (Top 14, Premiership, URC, Super Rugby, MLR, Top League Japan). Plus jamais de matchs amateur/U18.
+2. **Auto-resolve** : Les 5 sports (Football, NBA, Hockey, NFL, Rugby) skipent immediatement les matchs avec status NS/PST/CANC/TBD au lieu de les re-checker en boucle. 0 appel API gaspille sur les matchs fantomes.
+
+REGLE : **Ne JAMAIS generer de predictions pour des ligues qui ne sont pas dans nos listes whitelist. L'API free ne couvre pas les ligues mineures correctement → matchs fantomes → quota burn → ban.**
+
 **Points** :
 - Prediction reelle (score/prix) : +15 base + streak bonus (max 50)
 - Prediction opinion : +10 base + streak bonus (max 50)
@@ -440,7 +454,10 @@ package.json           — Dependencies (express, pg, dotenv, node-telegram-bot-
 | NewsData | ~70 (8 cycles x ~9 appels avec live sports) | 200/jour | ~35% |
 | CoinGecko | ~8 (toutes les 3h) | 30/min | negligeable |
 
-**IMPORTANT — Incident du 28/03/2026** : L'ancien compte API-Sports a ete banni car l'auto-resolve spammait ~200-300 appels/jour (checkait les scores pendant les matchs). Fix applique : smart delay par sport (attend que le match soit fini avant de checker). Nouveau compte API-Sports cree et configure dans Railway.
+**IMPORTANT — Incidents du 28/03/2026** :
+1. Ancien compte API-Sports banni (auto-resolve spammait pendant les matchs). Fix: smart delay par sport.
+2. Matchs fantomes de ligues mineures (NS indefiniment) brulaient le quota en boucle. Fix: engine whitelist ligues connues + auto-resolve skip NS/PST/CANC.
+Nouveau compte API-Sports cree et configure dans Railway. **REGLE : ne JAMAIS ajouter de ligues sans verifier qu'elles sont bien couvertes par l'API free.**
 
 ---
 
@@ -449,6 +466,7 @@ package.json           — Dependencies (express, pg, dotenv, node-telegram-bot-
 | Date | Incident | Cause | Fix |
 |------|----------|-------|-----|
 | 28/03/2026 | Compte API-Sports banni | Auto-resolve spammait les scores pendant les matchs (6-12 appels/match) | Smart delay par sport + max retries + nouveau compte |
+| 28/03/2026 | Rugby 66% quota (3 matchs) | Matchs de ligues mineures (amateur, U18) bloques en NS sur l'API → auto-resolve spam en boucle | Engine: whitelist ligues connues uniquement. Auto-resolve: skip NS/PST/CANC immediatement |
 
 ---
 
