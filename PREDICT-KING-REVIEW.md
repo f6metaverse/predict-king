@@ -306,15 +306,18 @@ Quand l'user clique sur Football ou Rugby :
 | Quoi | Frequence | Trigger |
 |------|-----------|---------|
 | **API-Sports** (6 sports) | Lundi matin 6-10h UTC | `smartGenerate()` → `weeklySportsFetch()` |
+| **MMA mid-week** | Jeudi/Vendredi (si < 3 combat preds) | `smartGenerate()` → `generateCombatLive()` |
 | **Live sports** (F1, MotoGP, Tennis, Boxing, WWE, Storylines) | Toutes les 3h | `lightCycle()` → `liveSportsRefresh()` |
 | **Crypto prix** | Toutes les 3h | `lightCycle()` → `generateCryptoLive()` |
-| **News rotation** | Toutes les 3h | `lightCycle()` → `generateFromNews()` |
+| **News rotation** | Toutes les 3h (12 cycles propres) | `lightCycle()` → `generateFromNews()` |
 | **Auto-resolve** | Toutes les 30 min | `resolveAll()` |
-| **Emergency** | Toutes les heures | Si total preds < 10 → force weekly |
+| **Emergency** | Toutes les heures | Si total preds < 5 → force weekly |
 | **Broadcast** | 10h + 18h UTC | Top 3 predictions par votes |
 | **Cleanup expired** | Toutes les 3h | `cleanupExpired()` |
+| **Startup** | Au redeploy | Skip generation si 50+ preds actives (protege les quotas) |
 
 **Rate limit weekly** : max 1 fetch API-Sports par 12h (cooldown global)
+**MMA free plan** : acces limite a 3 jours → lundi fetch = lun-mer, jeudi fetch = jeu-sam (couvre le card UFC du weekend)
 
 ---
 
@@ -450,14 +453,17 @@ package.json           — Dependencies (express, pg, dotenv, node-telegram-bot-
 
 | API | Appels/jour | Quota | Usage |
 |-----|-------------|-------|-------|
-| API-Sports | ~41 le lundi, ~10-20 les autres jours (auto-resolve smart) | 100/jour | ~45% max |
-| NewsData | ~70 (8 cycles x ~9 appels avec live sports) | 200/jour | ~35% |
+| API-Sports | ~41 le lundi, ~15 jeu/ven (MMA), ~5-10 autres jours (auto-resolve) | 100/jour/sport | ~45% max |
+| NewsData | ~85 (8 cycles x ~11 appels: 4 rotation + 7 live sports) | 200/jour | ~43% |
 | CoinGecko | ~8 (toutes les 3h) | 30/min | negligeable |
 
-**IMPORTANT — Incidents du 28/03/2026** :
-1. Ancien compte API-Sports banni (auto-resolve spammait pendant les matchs). Fix: smart delay par sport.
-2. Matchs fantomes de ligues mineures (NS indefiniment) brulaient le quota en boucle. Fix: engine whitelist ligues connues + auto-resolve skip NS/PST/CANC.
-Nouveau compte API-Sports cree et configure dans Railway. **REGLE : ne JAMAIS ajouter de ligues sans verifier qu'elles sont bien couvertes par l'API free.**
+**IMPORTANT — Compte API-Sports #3** (cle: `233357...1968`, compte Paul Juliaks). Les 2 premiers comptes ont ete bannis le 28/03/2026.
+
+**REGLES QUOTA CRITIQUES** :
+1. **Ne JAMAIS ajouter de ligues** sans verifier qu'elles sont bien couvertes par l'API free → matchs fantomes → quota burn → ban
+2. **Ne JAMAIS forcer la generation au startup** si y'a deja des predictions → chaque redeploy = 1 cycle complet = ~11+ appels NewsData + potentiellement 41 appels API-Sports
+3. **Ne JAMAIS laisser de categories mortes** dans la rotation NewsData → appels pour rien
+4. **Toujours un `break` ou skip** quand l'API retourne une erreur (pas continuer a boucler)
 
 ---
 
@@ -465,9 +471,41 @@ Nouveau compte API-Sports cree et configure dans Railway. **REGLE : ne JAMAIS aj
 
 | Date | Incident | Cause | Fix |
 |------|----------|-------|-----|
-| 28/03/2026 | Compte API-Sports banni | Auto-resolve spammait les scores pendant les matchs (6-12 appels/match) | Smart delay par sport + max retries + nouveau compte |
+| 28/03/2026 | Compte API-Sports #1 banni | Auto-resolve spammait les scores pendant les matchs (6-12 appels/match) | Smart delay par sport + max retries + nouveau compte |
 | 28/03/2026 | Rugby 66% quota (3 matchs) | Matchs de ligues mineures (amateur, U18) bloques en NS sur l'API → auto-resolve spam en boucle | Engine: whitelist ligues connues uniquement. Auto-resolve: skip NS/PST/CANC immediatement |
+| 28/03/2026 | Compte API-Sports #2 banni | Ghost matches encore actifs au moment du fix + multiples redeploys chacun forcant un weekly fetch complet (~41 appels) | Startup skip si 50+ preds actives. Plus de forceWeekly au redeploy |
+| 28/03/2026 | NewsData quota cramer | 6 redeploys x 11 appels + categories mortes (golf, cycling, esports, athletics, etc.) dans la rotation = trop d'appels | Vire 4 cycles morts (15→12), startup skip, plus de categories fantomes |
+| 28/03/2026 | WWE 0 predictions ever | Query NewsData cassee ("Raw wrestling" = phrase exacte), WrestleMania skip (21.2j > limite 21j), NXT Roadblock prioritise sur WrestleMania | Fix query (Raw OR wrestling), fenetre 28j, priorite mega > major > nxt |
+| 28/03/2026 | MMA invisible en semaine | Free plan = 3 jours, weekly fetch lundi, UFC le samedi = hors range | Mid-week fetch jeudi/vendredi pour choper le card du weekend |
 
 ---
 
-*Document mis a jour le 28 Mars 2026 — Version 2.1*
+## FRONTEND — Trending Feed (28/03/2026)
+
+La page "All" n'affiche plus les 600+ predictions d'un coup. A la place, un feed cure par sections :
+
+```
+🔥 HOT RIGHT NOW          → top 5 toutes categories (score: freshness + urgency + votes)
+🏆 TRENDING SPORT         → top 5 sport
+₿ TRENDING CRYPTO         → top 5 crypto
+📰 TRENDING NEWS          → top 5 news
+🎭 TRENDING ENTERTAINMENT → top 5 entertainment
+```
+
+**Hot score** = freshness (cree recemment) + urgency (expire bientot) + engagement (votes).
+Le score scale automatiquement : sans users c'est base sur freshness/urgency, avec des users les votes prennent le dessus.
+Les categories specifiques (Sport, Crypto, News, Entertainment) affichent toujours TOUTES les predictions comme avant.
+
+---
+
+## NEWS ROTATION — 12 cycles propres
+
+Categories actives dans la rotation : crypto, musique, gaming, cinema, drama, politics, world, science, health, trending, crime, environment, business, lifestyle, food.
+
+**Categories SUPPRIMEES** (28/03/2026) : sports_news, motorsport, golf, combat_news, cycling, wrestling, athletics, esports, education, tourism. Toutes remplacees par des moteurs dedies ou jamais utilisees.
+
+**REGLE : ne JAMAIS ajouter une categorie dans la rotation sans verifier qu'elle a un bouton dans le frontend ET un MIN_SLOTS. Sinon c'est du quota brule pour des predictions invisibles.**
+
+---
+
+*Document mis a jour le 28 Mars 2026 — Version 2.2*
