@@ -535,11 +535,15 @@ async function generateFootballLive() {
       m.fixture?.status?.short === 'NS' || m.fixture?.status?.short === 'TBD'
     );
 
-    // Sort by tier: TIER 1 first, then TIER 2, then TIER 3, then unknown
-    upcoming.sort((a, b) => getFootballTier(a.league?.id) - getFootballTier(b.league?.id));
+    // ONLY keep matches from known leagues (tier 1/2/3) — no random U18/amateur garbage
+    const knownLeagueMatches = upcoming.filter(m => TOP_FOOTBALL_LEAGUES.includes(m.league?.id));
+
+    // Sort by tier: TIER 1 first, then TIER 2, then TIER 3
+    knownLeagueMatches.sort((a, b) => getFootballTier(a.league?.id) - getFootballTier(b.league?.id));
+    console.log(`    Football: ${knownLeagueMatches.length} matches from known leagues (filtered from ${upcoming.length})`);
 
     // Take top 8 matches after tier sorting
-    for (const match of upcoming.slice(0, 8)) {
+    for (const match of knownLeagueMatches.slice(0, 8)) {
       const home = match.teams.home.name;
       const away = match.teams.away.name;
       const league = match.league.name;
@@ -1633,13 +1637,12 @@ async function generateRugbyLive() {
       }
     }
 
-    // Prioritize top leagues first
+    // ONLY keep matches from known top leagues — no amateur/lower division garbage
     const topGames = allGames.filter(g => TOP_RUGBY_LEAGUES.includes(g.league?.id));
-    const otherGames = allGames.filter(g => !TOP_RUGBY_LEAGUES.includes(g.league?.id));
-    const sortedGames = [...topGames, ...otherGames];
+    console.log(`    Rugby: ${topGames.length} matches from known leagues (filtered from ${allGames.length})`);
 
-    // Take top 6 games after sorting by league priority
-    const selectedGames = sortedGames.slice(0, 6);
+    // Take top 6 games
+    const selectedGames = topGames.slice(0, 6);
 
     for (let i = 0; i < selectedGames.length; i++) {
       const game = selectedGames[i];

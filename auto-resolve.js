@@ -101,6 +101,11 @@ async function resolveFootball() {
       if (!fixture) continue;
 
       const status = fixture.fixture?.status?.short;
+      // Still "Not Started" hours after kickoff = ghost match, skip API spam
+      if (status === 'NS' || status === 'TBD' || status === 'PST' || status === 'CANC') {
+        console.log(`⏭️ Football #${fixtureId}: status ${status} — skipping (ghost/cancelled)`);
+        continue;
+      }
       // FT = Full Time, AET = After Extra Time, PEN = Penalties
       if (!['FT', 'AET', 'PEN'].includes(status)) continue;
 
@@ -190,6 +195,10 @@ async function resolveBasketball() {
       if (!game) continue;
 
       const status = game.status?.short;
+      if (status === 'NS' || status === 'PST' || status === 'CANC') {
+        console.log(`⏭️ NBA #${gameId}: status ${status} — skipping (ghost/cancelled)`);
+        continue;
+      }
       if (!['FT', 'AOT'].includes(status)) continue;
 
       const scoreHome = game.scores?.home?.total ?? 0;
@@ -265,6 +274,10 @@ async function resolveHockey() {
       if (!game) continue;
 
       const status = game.status?.short;
+      if (status === 'NS' || status === 'PST' || status === 'CANC') {
+        console.log(`⏭️ Hockey #${gameId}: status ${status} — skipping (ghost/cancelled)`);
+        continue;
+      }
       if (!['FT', 'AOT', 'AP'].includes(status)) continue;
 
       const scoreHome = game.scores?.home ?? 0;
@@ -340,6 +353,10 @@ async function resolveNFL() {
       if (!game) continue;
 
       const status = game.status?.short;
+      if (status === 'NS' || status === 'PST' || status === 'CANC') {
+        console.log(`⏭️ NFL #${gameId}: status ${status} — skipping (ghost/cancelled)`);
+        continue;
+      }
       if (!['FT', 'AOT'].includes(status)) continue;
 
       const scoreHome = game.scores?.home?.total ?? 0;
@@ -400,7 +417,13 @@ async function resolveRugby() {
       const game = data.response?.[0];
 
       if (!game) continue;
-      if (game.status?.short !== 'FT') continue;
+
+      const status = game.status?.short;
+      if (status === 'NS' || status === 'PST' || status === 'CANC') {
+        console.log(`⏭️ Rugby #${gameId}: status ${status} — skipping (ghost/cancelled)`);
+        continue;
+      }
+      if (status !== 'FT') continue;
 
       const scoreHome = game.scores?.home ?? 0;
       const scoreAway = game.scores?.away ?? 0;
