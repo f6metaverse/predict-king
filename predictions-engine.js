@@ -2290,7 +2290,7 @@ async function generateWWELive() {
 
     // Step 2: Fetch WWE news
     const pleSearch = nextPLE ? encodeURIComponent(nextPLE.name) : 'SummerSlam';
-    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=entertainment,sports&qInTitle=WWE%20OR%20WrestleMania%20OR%20SmackDown%20OR%20Raw%20OR%20wrestling%20OR%20${pleSearch}&removeduplicate=1`;
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=entertainment,sports&qInTitle=WWE%20OR%20WrestleMania%20OR%20SmackDown%20OR%20wrestling%20OR%20${pleSearch}&removeduplicate=1`;
     const res = await fetch(url);
     const data = await res.json();
 
