@@ -1600,17 +1600,29 @@ async function generateBoxingLive() {
     const topFighters = Object.values(fighterMentions).sort((a, b) => b.count - a.count);
     console.log(`    Boxing: Top fighters in news: ${topFighters.slice(0, 5).map(f => `${f.name}(${f.count})`).join(', ')}`);
 
-    // Step 2: Detect matchups from article titles ("A vs B", "A fights B", "A v B")
+    // Step 2: Detect matchups + classify context (confirmed/announced/rumored/buzz)
+    const CONFIRMED_KW = ['confirmed', 'official', 'signed', 'scheduled', 'set for', 'finalized', 'title fight', 'ppv', 'undercard', 'fight night', 'fight card', 'weigh-in', 'weigh in'];
+    const ANNOUNCED_KW = ['announced', 'agreement', 'deal', 'ordered', 'mandatory', 'will fight', 'returns to face', 'takes on'];
+    const RUMORED_KW = ['in talks', 'negotiations', 'reportedly', 'sources say', 'close to', 'expected to', 'likely', 'targeting', 'in discussions', 'exploring'];
+    const BUZZ_KW = ['could', 'should', 'would', 'dream fight', 'imagine', 'who would win', 'potential', 'wish list', 'fantasy'];
+
+    function classifyMatchup(articleTitle, articleDesc) {
+      const text = `${articleTitle} ${articleDesc || ''}`.toLowerCase();
+      if (CONFIRMED_KW.some(kw => text.includes(kw))) return 'confirmed';
+      if (ANNOUNCED_KW.some(kw => text.includes(kw))) return 'announced';
+      if (RUMORED_KW.some(kw => text.includes(kw))) return 'rumored';
+      if (BUZZ_KW.some(kw => text.includes(kw))) return 'buzz';
+      return 'announced'; // default: if "vs" is in a headline, it's likely real
+    }
+
     const matchups = [];
-    const vsRegex = /([A-Z][\w'-]+(?:\s[A-Z][\w'-]+)*)\s+(?:vs\.?|v\.?|versus|fights?|facing|meets)\s+([A-Z][\w'-]+(?:\s[A-Z][\w'-]+)*)/gi;
+    const vsRegex = /([A-Z][\w'-]+(?:\s[A-Z][\w'-]+)*)\s+(?:vs\.?|v\.?|versus|fights?|facing|meets|takes on)\s+([A-Z][\w'-]+(?:\s[A-Z][\w'-]+)*)/gi;
 
     for (const article of articles) {
-      const text = article.title;
       let match;
-      while ((match = vsRegex.exec(text)) !== null) {
+      while ((match = vsRegex.exec(article.title)) !== null) {
         const name1 = match[1].trim();
         const name2 = match[2].trim();
-        // Try to match to known fighters
         const f1 = BOXING_FIGHTERS.find(f =>
           name1.toLowerCase().includes(f.full.split(' ').pop().toLowerCase()) ||
           name1.toLowerCase().includes(f.name.toLowerCase())
@@ -1620,22 +1632,27 @@ async function generateBoxingLive() {
           name2.toLowerCase().includes(f.name.toLowerCase())
         );
         if (f1 && f2 && f1.name !== f2.name) {
-          matchups.push({ fighter1: f1, fighter2: f2, source: article.title });
+          const status = classifyMatchup(article.title, article.description);
+          matchups.push({ fighter1: f1, fighter2: f2, status, source: article.title });
         }
       }
     }
 
-    console.log(`    Boxing: ${matchups.length} matchups detected in headlines`);
+    // Sort: confirmed first, then announced, then rumored, then buzz
+    const statusOrder = { confirmed: 0, announced: 1, rumored: 2, buzz: 3 };
+    matchups.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
+
+    console.log(`    Boxing: ${matchups.length} matchups detected — ${matchups.map(m => `${m.fighter1.name}v${m.fighter2.name}(${m.status})`).join(', ')}`);
 
     const baseMetadata = {
       apiType: 'boxing',
       source: 'newsdata'
     };
 
-    // Use smart expiry — fights are usually announced for "this weekend" or "next month"
-    const defaultExpiry = expiresInHours(72); // 3 days default
+    const statusEmoji = { confirmed: '🟢', announced: '🟡', rumored: '🟠', buzz: '🔵' };
+    const statusLabel = { confirmed: 'CONFIRMED', announced: 'ANNOUNCED', rumored: 'IN TALKS', buzz: 'BUZZ' };
 
-    // Step 3: Generate predictions from detected matchups
+    // Step 3: Generate predictions adapted to each matchup status
     const usedMatchups = new Set();
 
     for (const matchup of matchups) {
@@ -1645,42 +1662,76 @@ async function generateBoxingLive() {
 
       const f1 = matchup.fighter1;
       const f2 = matchup.fighter2;
-      const fightExpiry = getSmartExpiry(matchup.source, '');
+      const status = matchup.status;
+      const badge = `${statusEmoji[status]} ${statusLabel[status]}`;
+      const fightMeta = { ...baseMetadata, fighter1: f1.full, fighter2: f2.full, fightStatus: status };
 
-      // Winner prediction
-      predictions.push({
-        question: `🥊 ${f1.full} ${f1.country} vs ${f2.full} ${f2.country} — Who wins?`,
-        optionA: f1.name, optionB: f2.name,
-        category: 'boxing', emoji: '🥊',
-        expiresAt: fightExpiry,
-        metadata: { ...baseMetadata, predType: 'winner', fighter1: f1.full, fighter2: f2.full }
-      });
+      if (status === 'confirmed' || status === 'announced') {
+        // Real fight → serious predictions
+        const fightExpiry = getSmartExpiry(matchup.source, '');
 
-      // KO or Decision
-      predictions.push({
-        question: `🥊 ${f1.name} vs ${f2.name} — KO/TKO or Decision?`,
-        optionA: 'KO / TKO', optionB: 'Goes to Decision',
-        category: 'boxing', emoji: '🥊',
-        expiresAt: fightExpiry,
-        metadata: { ...baseMetadata, predType: 'method', fighter1: f1.full, fighter2: f2.full }
-      });
+        predictions.push({
+          question: `🥊 ${badge}: ${f1.full} ${f1.country} vs ${f2.full} ${f2.country} — Who wins?`,
+          optionA: f1.name, optionB: f2.name,
+          category: 'boxing', emoji: '🥊',
+          expiresAt: fightExpiry,
+          metadata: { ...fightMeta, predType: 'winner' }
+        });
 
-      // Early or late stoppage (if both are known KO artists)
-      predictions.push({
-        question: `🥊 ${f1.name} vs ${f2.name} — Over or Under 6 rounds?`,
-        optionA: 'Under 6 — Early finish', optionB: 'Over 6 — Goes long',
-        category: 'boxing', emoji: '🥊',
-        expiresAt: fightExpiry,
-        metadata: { ...baseMetadata, predType: 'rounds', fighter1: f1.full, fighter2: f2.full }
-      });
+        predictions.push({
+          question: `🥊 ${f1.name} vs ${f2.name} — KO/TKO or Decision?`,
+          optionA: 'KO / TKO', optionB: 'Goes to Decision',
+          category: 'boxing', emoji: '🥊',
+          expiresAt: fightExpiry,
+          metadata: { ...fightMeta, predType: 'method' }
+        });
 
-      if (predictions.length >= 9) break; // Max 3 matchups x 3 predictions
+        if (status === 'confirmed') {
+          // Confirmed gets the rounds prediction too
+          predictions.push({
+            question: `🥊 ${f1.name} vs ${f2.name} — Over or Under 6 rounds?`,
+            optionA: 'Under 6 — Early finish', optionB: 'Over 6 — Goes long',
+            category: 'boxing', emoji: '🥊',
+            expiresAt: fightExpiry,
+            metadata: { ...fightMeta, predType: 'rounds' }
+          });
+        }
+
+      } else if (status === 'rumored') {
+        // Rumor → will it happen + who would win
+        predictions.push({
+          question: `🥊 ${badge}: ${f1.full} vs ${f2.full} — Will this fight happen?`,
+          optionA: 'YES — It\'s happening', optionB: 'NO — Falls through',
+          category: 'boxing', emoji: '🥊',
+          expiresAt: expiresInHours(72),
+          metadata: { ...fightMeta, predType: 'will_happen' }
+        });
+
+        predictions.push({
+          question: `🥊 If ${f1.name} vs ${f2.name} happens — Who wins?`,
+          optionA: f1.name, optionB: f2.name,
+          category: 'boxing', emoji: '🥊',
+          expiresAt: expiresInHours(72),
+          metadata: { ...fightMeta, predType: 'winner_if' }
+        });
+
+      } else {
+        // Buzz → fan debate
+        predictions.push({
+          question: `🥊 ${badge}: ${f1.full} ${f1.country} vs ${f2.full} ${f2.country} — Should this fight happen?`,
+          optionA: 'YES — Make it happen!', optionB: 'NO — Not interested',
+          category: 'boxing', emoji: '🥊',
+          expiresAt: expiresInHours(48),
+          metadata: { ...fightMeta, predType: 'should_happen' }
+        });
+      }
+
+      if (predictions.length >= 10) break;
     }
 
-    // Step 4: If no matchup detected, use top fighters for general predictions
+    // Step 4: If no matchup detected, use top fighters
     if (matchups.length === 0 && topFighters.length >= 2) {
       console.log('    Boxing: No matchups in headlines, using top mentioned fighters');
-
       const f1 = topFighters[0];
       const f2 = topFighters[1];
 
@@ -1688,34 +1739,23 @@ async function generateBoxingLive() {
         question: `🥊 Boxing: ${f1.full} ${f1.country} vs ${f2.full} ${f2.country} — Who would you pick?`,
         optionA: f1.name, optionB: f2.name,
         category: 'boxing', emoji: '🥊',
-        expiresAt: defaultExpiry,
+        expiresAt: expiresInHours(72),
         metadata: { ...baseMetadata, predType: 'fantasy_matchup', fighter1: f1.full, fighter2: f2.full }
       });
-
-      if (topFighters.length >= 3) {
-        predictions.push({
-          question: `🥊 ${topFighters[2].full} ${topFighters[2].country} — Next fight ends in KO?`,
-          optionA: 'YES — KO', optionB: 'NO — Decision',
-          category: 'boxing', emoji: '🥊',
-          expiresAt: defaultExpiry,
-          metadata: { ...baseMetadata, predType: 'ko_prediction', fighter: topFighters[2].full }
-        });
-      }
     }
 
-    // Step 5: Hot take / drama prediction
+    // Step 5: P4P / hot take
     if (topFighters.length >= 1) {
       const dramaTemplates = [
-        { q: `🥊 Boxing: Upset of the year coming soon?`, a: 'YES — Underdog wins', b: 'NO — Favorites keep winning', type: 'upset' },
         { q: `🥊 Boxing: Is ${topFighters[0].full} the best P4P right now?`, a: `YES — ${topFighters[0].name} is #1`, b: 'NO — Someone else', type: 'p4p' },
-        { q: `🥊 Boxing: Next big KO will be in the heavyweight division?`, a: 'YES — Heavyweights deliver', b: 'NO — Lighter weight class', type: 'ko_division' },
+        { q: `🥊 Boxing: Next big KO — Heavyweight or lower weight class?`, a: 'Heavyweight KO', b: 'Lower weight class', type: 'ko_division' },
       ];
       const drama = dramaTemplates[Math.floor(Math.random() * dramaTemplates.length)];
       predictions.push({
         question: drama.q,
         optionA: drama.a, optionB: drama.b,
         category: 'boxing', emoji: '🥊',
-        expiresAt: defaultExpiry,
+        expiresAt: expiresInHours(72),
         metadata: { ...baseMetadata, predType: drama.type }
       });
     }
