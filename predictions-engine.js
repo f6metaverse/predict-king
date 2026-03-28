@@ -1210,7 +1210,8 @@ async function generateFootballStorylines() {
     const res = await fetch(url);
     const data = await res.json();
 
-    const articles = (data.results || []).filter(a => a.title && a.title.length >= 15);
+    if (!data.results || !Array.isArray(data.results)) return predictions;
+    const articles = data.results.filter(a => a.title && a.title.length >= 15);
     console.log(`    Football storylines: ${articles.length} articles found`);
 
     if (articles.length === 0) return predictions;

@@ -12,6 +12,49 @@ function setBot(botInstance) {
   bot = botInstance;
 }
 
+// --- SMART DELAY: only check after match is likely finished ---
+// Matches expire 5 min BEFORE kickoff, but the game still needs to be played!
+// This avoids spamming the API during the match.
+const SPORT_DURATION_HOURS = {
+  football: 2.5,   // 90min + halftime + extra time buffer
+  basketball: 3,   // ~2.5h + overtime buffer
+  hockey: 3,       // ~2.5h + overtime/shootout
+  'american-football': 4, // ~3.5h + overtime
+  rugby: 2.5,      // 80min + halftime + buffer
+  mma: 5,          // full card can last 4-5h
+};
+
+// Max hours to keep retrying before falling back to majority vote
+const MAX_RESOLVE_HOURS = 8;
+
+function isReadyToResolve(pred) {
+  const now = new Date();
+  const expiresAt = new Date(pred.expiresAt);
+
+  // Not expired yet — don't touch
+  if (expiresAt > now) return false;
+
+  // Get sport type and match duration
+  const apiType = pred.metadata?.apiType || '';
+  const duration = SPORT_DURATION_HOURS[apiType] || 3;
+
+  // Kickoff is ~5 min after expiry (we expire 5 min before kickoff)
+  const kickoff = new Date(expiresAt.getTime() + 5 * 60 * 1000);
+  const earliestResolve = new Date(kickoff.getTime() + duration * 3600000);
+
+  // Don't check until the match is likely finished
+  return now >= earliestResolve;
+}
+
+function hasExceededMaxRetries(pred) {
+  const now = new Date();
+  const expiresAt = new Date(pred.expiresAt);
+  const hoursSinceExpiry = (now - expiresAt) / 3600000;
+  const apiType = pred.metadata?.apiType || '';
+  const duration = SPORT_DURATION_HOURS[apiType] || 3;
+  return hoursSinceExpiry > (duration + MAX_RESOLVE_HOURS);
+}
+
 // --- SEND NOTIFICATION TO USER ---
 async function notifyUser(userId, message) {
   if (!bot) return;
@@ -38,7 +81,7 @@ async function resolveFootball() {
     p.category === 'football' &&
     p.metadata?.apiType === 'football' &&
     p.metadata?.fixtureId &&
-    new Date(p.expiresAt) <= now
+    isReadyToResolve(p)
   );
 
   if (footballPreds.length === 0) return 0;
@@ -128,7 +171,7 @@ async function resolveBasketball() {
     p.category === 'nba' &&
     p.metadata?.apiType === 'basketball' &&
     p.metadata?.gameId &&
-    new Date(p.expiresAt) <= now
+    isReadyToResolve(p)
   );
 
   if (nbaPreds.length === 0) return 0;
@@ -203,7 +246,7 @@ async function resolveHockey() {
     p.category === 'hockey' &&
     p.metadata?.apiType === 'hockey' &&
     p.metadata?.gameId &&
-    new Date(p.expiresAt) <= now
+    isReadyToResolve(p)
   );
 
   if (hockeyPreds.length === 0) return 0;
@@ -278,7 +321,7 @@ async function resolveNFL() {
     p.category === 'nfl' &&
     p.metadata?.apiType === 'american-football' &&
     p.metadata?.gameId &&
-    new Date(p.expiresAt) <= now
+    isReadyToResolve(p)
   );
 
   if (nflPreds.length === 0) return 0;
@@ -340,7 +383,7 @@ async function resolveRugby() {
     p.category === 'rugby' &&
     p.metadata?.apiType === 'rugby' &&
     p.metadata?.gameId &&
-    new Date(p.expiresAt) <= now
+    isReadyToResolve(p)
   );
 
   if (rugbyPreds.length === 0) return 0;
@@ -467,11 +510,8 @@ async function resolveByMajority(predsToResolve) {
   for (const pred of preds) {
     // Skip if it has API metadata and should be resolved by real data later
     if (pred.metadata?.fixtureId || pred.metadata?.gameId || pred.metadata?.fightId) {
-      // Check if it's been expired for more than 24h (API data might not come)
-      const expiredAt = new Date(pred.expiresAt);
-      const hoursSinceExpiry = (Date.now() - expiredAt.getTime()) / (1000 * 60 * 60);
-      if (hoursSinceExpiry < 24) continue; // Wait for real data
-      console.log(`⚠️ Fallback majority resolve (no API data after 24h): "${pred.question}"`);
+      if (!hasExceededMaxRetries(pred)) continue; // Still waiting for real data
+      console.log(`⚠️ Fallback majority resolve (max retries exceeded): "${pred.question}"`);
     }
 
     // No votes? Free the slot
