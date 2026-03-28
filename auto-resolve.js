@@ -8,6 +8,11 @@ const db = require('./db');
 const FOOTBALL_API_KEY = process.env.FOOTBALL_API_KEY || '';
 let bot = null;
 
+// Ghost match blacklist — matches that returned NS/PST/CANC after kickoff
+// Once blacklisted, we NEVER call the API again for these IDs (saves quota)
+// They get cleaned up by the majority vote fallback after MAX_RESOLVE_HOURS
+const ghostMatches = new Set();
+
 function setBot(botInstance) {
   bot = botInstance;
 }
@@ -91,6 +96,9 @@ async function resolveFootball() {
   const fixtureIds = [...new Set(footballPreds.map(p => p.metadata.fixtureId))];
 
   for (const fixtureId of fixtureIds) {
+    // Skip ghost matches entirely — 0 API calls
+    if (ghostMatches.has(`football-${fixtureId}`)) continue;
+
     try {
       const res = await fetch(`https://v3.football.api-sports.io/fixtures?id=${fixtureId}`, {
         headers: { 'x-apisports-key': FOOTBALL_API_KEY }
@@ -101,9 +109,10 @@ async function resolveFootball() {
       if (!fixture) continue;
 
       const status = fixture.fixture?.status?.short;
-      // Still "Not Started" hours after kickoff = ghost match, skip API spam
+      // Still "Not Started" hours after kickoff = ghost match, blacklist forever
       if (status === 'NS' || status === 'TBD' || status === 'PST' || status === 'CANC') {
-        console.log(`⏭️ Football #${fixtureId}: status ${status} — skipping (ghost/cancelled)`);
+        ghostMatches.add(`football-${fixtureId}`);
+        console.log(`👻 Football #${fixtureId}: status ${status} — blacklisted (0 future API calls)`);
         continue;
       }
       // FT = Full Time, AET = After Extra Time, PEN = Penalties
@@ -185,6 +194,8 @@ async function resolveBasketball() {
   const gameIds = [...new Set(nbaPreds.map(p => p.metadata.gameId))];
 
   for (const gameId of gameIds) {
+    if (ghostMatches.has(`nba-${gameId}`)) continue;
+
     try {
       const res = await fetch(`https://v1.basketball.api-sports.io/games?id=${gameId}`, {
         headers: { 'x-apisports-key': FOOTBALL_API_KEY }
@@ -196,7 +207,8 @@ async function resolveBasketball() {
 
       const status = game.status?.short;
       if (status === 'NS' || status === 'PST' || status === 'CANC') {
-        console.log(`⏭️ NBA #${gameId}: status ${status} — skipping (ghost/cancelled)`);
+        ghostMatches.add(`nba-${gameId}`);
+        console.log(`👻 NBA #${gameId}: status ${status} — blacklisted`);
         continue;
       }
       if (!['FT', 'AOT'].includes(status)) continue;
@@ -264,6 +276,8 @@ async function resolveHockey() {
   const gameIds = [...new Set(hockeyPreds.map(p => p.metadata.gameId))];
 
   for (const gameId of gameIds) {
+    if (ghostMatches.has(`hockey-${gameId}`)) continue;
+
     try {
       const res = await fetch(`https://v1.hockey.api-sports.io/games?id=${gameId}`, {
         headers: { 'x-apisports-key': FOOTBALL_API_KEY }
@@ -275,7 +289,8 @@ async function resolveHockey() {
 
       const status = game.status?.short;
       if (status === 'NS' || status === 'PST' || status === 'CANC') {
-        console.log(`⏭️ Hockey #${gameId}: status ${status} — skipping (ghost/cancelled)`);
+        ghostMatches.add(`hockey-${gameId}`);
+        console.log(`👻 Hockey #${gameId}: status ${status} — blacklisted`);
         continue;
       }
       if (!['FT', 'AOT', 'AP'].includes(status)) continue;
@@ -343,6 +358,8 @@ async function resolveNFL() {
   const gameIds = [...new Set(nflPreds.map(p => p.metadata.gameId))];
 
   for (const gameId of gameIds) {
+    if (ghostMatches.has(`nfl-${gameId}`)) continue;
+
     try {
       const res = await fetch(`https://v1.american-football.api-sports.io/games?id=${gameId}`, {
         headers: { 'x-apisports-key': FOOTBALL_API_KEY }
@@ -354,7 +371,8 @@ async function resolveNFL() {
 
       const status = game.status?.short;
       if (status === 'NS' || status === 'PST' || status === 'CANC') {
-        console.log(`⏭️ NFL #${gameId}: status ${status} — skipping (ghost/cancelled)`);
+        ghostMatches.add(`nfl-${gameId}`);
+        console.log(`👻 NFL #${gameId}: status ${status} — blacklisted`);
         continue;
       }
       if (!['FT', 'AOT'].includes(status)) continue;
@@ -409,6 +427,8 @@ async function resolveRugby() {
   const gameIds = [...new Set(rugbyPreds.map(p => p.metadata.gameId))];
 
   for (const gameId of gameIds) {
+    if (ghostMatches.has(`rugby-${gameId}`)) continue;
+
     try {
       const res = await fetch(`https://v1.rugby.api-sports.io/games?id=${gameId}`, {
         headers: { 'x-apisports-key': FOOTBALL_API_KEY }
@@ -420,7 +440,8 @@ async function resolveRugby() {
 
       const status = game.status?.short;
       if (status === 'NS' || status === 'PST' || status === 'CANC') {
-        console.log(`⏭️ Rugby #${gameId}: status ${status} — skipping (ghost/cancelled)`);
+        ghostMatches.add(`rugby-${gameId}`);
+        console.log(`👻 Rugby #${gameId}: status ${status} — blacklisted`);
         continue;
       }
       if (status !== 'FT') continue;
