@@ -67,6 +67,7 @@ const MIN_SLOTS = {
   motogp: 4,
   tennis: 5,
   boxing: 4,
+  wwe: 4,
   nfl: 4,
   hockey: 6,
   rugby: 3,
@@ -1768,6 +1769,273 @@ async function generateBoxingLive() {
 }
 
 // ============================================
+// WWE NEWS-POWERED GENERATOR
+// PPV calendar + weekly shows + storyline detection
+// Parse superstars, matchups, title changes, returns
+// ============================================
+
+const WWE_PLE_CALENDAR_2026 = [
+  { name: 'NXT Roadblock', month: 3, day: 31, tier: 'nxt' },
+  { name: 'NXT Stand & Deliver', month: 4, day: 4, tier: 'nxt' },
+  { name: 'WrestleMania 42', month: 4, day: 18, tier: 'mega', days: 2 },
+  { name: 'Backlash', month: 5, day: 9, tier: 'major' },
+  { name: 'Saturday Night\'s Main Event XLIV', month: 5, day: 23, tier: 'snme' },
+  { name: 'Clash in Italy', month: 5, day: 31, tier: 'major' },
+  { name: 'Night of Champions', month: 6, day: 27, tier: 'major' },
+  { name: 'SummerSlam', month: 8, day: 1, tier: 'mega', days: 2 },
+  { name: 'Money in the Bank', month: 9, day: 6, tier: 'major' },
+];
+
+// Top WWE superstars — main eventers + champions + fan favorites
+const WWE_SUPERSTARS = [
+  // Champions & main eventers
+  { name: 'CM Punk', brand: 'Raw', tier: 'main' },
+  { name: 'Cody Rhodes', brand: 'SmackDown', tier: 'main' },
+  { name: 'Roman Reigns', brand: 'SmackDown', tier: 'main' },
+  { name: 'Seth Rollins', brand: 'Raw', tier: 'main' },
+  { name: 'Drew McIntyre', brand: 'SmackDown', tier: 'main' },
+  { name: 'Gunther', brand: 'Raw', tier: 'main' },
+  { name: 'Jey Uso', brand: 'Raw', tier: 'main' },
+  { name: 'Jimmy Uso', brand: 'Raw', tier: 'main' },
+  { name: 'Damian Priest', brand: 'SmackDown', tier: 'main' },
+  { name: 'Penta', brand: 'Raw', tier: 'mid' },
+  // Upper midcard / rising stars
+  { name: 'LA Knight', brand: 'SmackDown', tier: 'upper' },
+  { name: 'Kevin Owens', brand: 'SmackDown', tier: 'upper' },
+  { name: 'Sami Zayn', brand: 'Raw', tier: 'upper' },
+  { name: 'Rhea Ripley', brand: 'Raw', tier: 'main' },
+  { name: 'Bianca Belair', brand: 'SmackDown', tier: 'main' },
+  { name: 'Becky Lynch', brand: 'Raw', tier: 'main' },
+  { name: 'Liv Morgan', brand: 'Raw', tier: 'main' },
+  { name: 'Charlotte Flair', brand: 'SmackDown', tier: 'main' },
+  { name: 'IYO SKY', brand: 'Raw', tier: 'upper' },
+  { name: 'Jade Cargill', brand: 'SmackDown', tier: 'upper' },
+  // Fan favorites
+  { name: 'Randy Orton', brand: 'SmackDown', tier: 'main' },
+  { name: 'John Cena', brand: 'Free Agent', tier: 'legend' },
+  { name: 'The Rock', brand: 'Free Agent', tier: 'legend' },
+  { name: 'Brock Lesnar', brand: 'Free Agent', tier: 'legend' },
+  { name: 'AJ Styles', brand: 'Raw', tier: 'upper' },
+  { name: 'Dominik Mysterio', brand: 'Raw', tier: 'mid' },
+  { name: 'Logan Paul', brand: 'SmackDown', tier: 'upper' },
+  { name: 'R-Truth', brand: 'SmackDown', tier: 'mid' },
+  // NXT top stars
+  { name: 'Joe Hendry', brand: 'NXT', tier: 'nxt' },
+  { name: 'Trick Williams', brand: 'NXT', tier: 'nxt' },
+];
+
+async function generateWWELive() {
+  const predictions = [];
+  try {
+    if (!NEWS_API_KEY) return predictions;
+
+    // Step 1: Find current/next PLE
+    const now = new Date();
+    let nextPLE = null;
+    for (const ple of WWE_PLE_CALENDAR_2026) {
+      const pleDate = new Date(Date.UTC(2026, ple.month - 1, ple.day, 23, 59));
+      const daysUntil = (pleDate - now) / 86400000;
+      if (daysUntil > -1 && daysUntil <= 21) { // Within 3 weeks
+        nextPLE = { ...ple, date: pleDate, daysUntil: Math.ceil(daysUntil) };
+        break;
+      }
+    }
+
+    // Step 2: Fetch WWE news
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=entertainment,sports&qInTitle=WWE%20OR%20WrestleMania%20OR%20SmackDown%20OR%20Raw%20wrestling%20OR%20${nextPLE ? encodeURIComponent(nextPLE.name) : 'SummerSlam'}&removeduplicate=1`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    const articles = (data.results || []).filter(a => a.title && a.title.length >= 15);
+    console.log(`    WWE: ${articles.length} news articles found${nextPLE ? ` (next PLE: ${nextPLE.name} in ${nextPLE.daysUntil}d)` : ''}`);
+
+    if (articles.length === 0) return predictions;
+
+    // Step 3: Parse superstar mentions
+    const starMentions = {};
+
+    for (const star of WWE_SUPERSTARS) {
+      const nameLC = star.name.toLowerCase();
+      // Handle multi-word names: match full name or last word
+      const lastWord = star.name.split(' ').pop().toLowerCase();
+      let count = 0;
+      for (const article of articles) {
+        const text = `${article.title} ${article.description || ''} ${(article.keywords || []).join(' ')}`.toLowerCase();
+        if (text.includes(nameLC) || (lastWord.length > 4 && text.includes(lastWord))) count++;
+      }
+      if (count > 0) starMentions[star.name] = { ...star, count };
+    }
+
+    const topStars = Object.values(starMentions).sort((a, b) => b.count - a.count);
+    console.log(`    WWE: Top superstars in news: ${topStars.slice(0, 6).map(s => `${s.name}(${s.count})`).join(', ')}`);
+
+    // Step 4: Detect matchups from headlines
+    const matchups = [];
+    const vsRegex = /([A-Z][\w'-]+(?:\s[A-Z][\w'-]+)*)\s+(?:vs\.?|v\.?|versus|faces?|fights?|battles?|challenges?|defends? against)\s+([A-Z][\w'-]+(?:\s[A-Z][\w'-]+)*)/gi;
+
+    for (const article of articles) {
+      let match;
+      while ((match = vsRegex.exec(article.title)) !== null) {
+        const name1 = match[1].trim();
+        const name2 = match[2].trim();
+        const s1 = WWE_SUPERSTARS.find(s => name1.toLowerCase().includes(s.name.toLowerCase()));
+        const s2 = WWE_SUPERSTARS.find(s => name2.toLowerCase().includes(s.name.toLowerCase()));
+        if (s1 && s2 && s1.name !== s2.name) {
+          matchups.push({ star1: s1, star2: s2, source: article.title });
+        }
+      }
+    }
+
+    // Step 5: Detect WWE-specific storyline keywords
+    const allText = articles.map(a => `${a.title} ${a.description || ''}`).join(' ').toLowerCase();
+    const hasHeelTurn = ['heel turn', 'turned heel', 'betrayed', 'betrayal', 'attacked'].some(kw => allText.includes(kw));
+    const hasReturn = ['return', 'comeback', 'is back', 'surprise appearance', 'shock return'].some(kw => allText.includes(kw));
+    const hasTitleChange = ['new champion', 'wins the title', 'title change', 'cashes in', 'new champ'].some(kw => allText.includes(kw));
+    const hasDraft = ['draft', 'trade', 'switches brands', 'moving to'].some(kw => allText.includes(kw));
+
+    const baseMetadata = {
+      apiType: 'wwe',
+      source: 'newsdata',
+      nextPLE: nextPLE?.name || null
+    };
+
+    // Default expiry: next PLE or 5 days
+    const defaultExpiry = nextPLE ? nextPLE.date.toISOString() : expiresInHours(120);
+
+    // ===== GENERATE PREDICTIONS =====
+
+    // --- PLE-specific predictions (if a big event is coming) ---
+    if (nextPLE) {
+      const pleName = nextPLE.name;
+      const isMega = nextPLE.tier === 'mega'; // WrestleMania, SummerSlam
+
+      // Matchup predictions from detected VS in news
+      const usedMatchups = new Set();
+      for (const matchup of matchups.slice(0, 3)) {
+        const key = [matchup.star1.name, matchup.star2.name].sort().join('-');
+        if (usedMatchups.has(key)) continue;
+        usedMatchups.add(key);
+
+        predictions.push({
+          question: `🤼 ${pleName}: ${matchup.star1.name} vs ${matchup.star2.name} — Who wins?`,
+          optionA: matchup.star1.name, optionB: matchup.star2.name,
+          category: 'wwe', emoji: '🤼',
+          expiresAt: defaultExpiry,
+          metadata: { ...baseMetadata, predType: 'match_winner', star1: matchup.star1.name, star2: matchup.star2.name }
+        });
+      }
+
+      // Title change prediction
+      if (topStars.length >= 1) {
+        const champ = topStars.find(s => s.tier === 'main') || topStars[0];
+        predictions.push({
+          question: `🤼 ${pleName}: Title change on the card?`,
+          optionA: 'YES — New champion crowned', optionB: 'NO — Champions retain',
+          category: 'wwe', emoji: '🤼',
+          expiresAt: defaultExpiry,
+          metadata: { ...baseMetadata, predType: 'title_change' }
+        });
+      }
+
+      // Mega event bonus predictions (WrestleMania, SummerSlam)
+      if (isMega) {
+        predictions.push({
+          question: `🤼 ${pleName}: Surprise return or debut?`,
+          optionA: 'YES — Someone shocks the world', optionB: 'NO — No surprises',
+          category: 'wwe', emoji: '🤼',
+          expiresAt: defaultExpiry,
+          metadata: { ...baseMetadata, predType: 'surprise_return' }
+        });
+
+        predictions.push({
+          question: `🤼 ${pleName}: Match of the night — Main event or undercard steals the show?`,
+          optionA: 'Main event delivers', optionB: 'Undercard steals it',
+          category: 'wwe', emoji: '🤼',
+          expiresAt: defaultExpiry,
+          metadata: { ...baseMetadata, predType: 'motn' }
+        });
+      }
+    }
+
+    // --- Storyline-driven predictions ---
+    if (hasHeelTurn && topStars.length >= 1) {
+      const heelCandidate = topStars.find(s => s.tier === 'upper' || s.tier === 'main') || topStars[0];
+      predictions.push({
+        question: `🤼 WWE: ${heelCandidate.name} — Heel turn coming?`,
+        optionA: 'YES — Betrayal incoming', optionB: 'NO — Staying face',
+        category: 'wwe', emoji: '🤼',
+        expiresAt: expiresInHours(72),
+        metadata: { ...baseMetadata, predType: 'heel_turn', star: heelCandidate.name }
+      });
+    }
+
+    if (hasReturn) {
+      predictions.push({
+        question: `🤼 WWE: Who makes a surprise return next?`,
+        optionA: 'Legend comeback', optionB: 'NXT call-up',
+        category: 'wwe', emoji: '🤼',
+        expiresAt: expiresInHours(72),
+        metadata: { ...baseMetadata, predType: 'return_type' }
+      });
+    }
+
+    if (hasTitleChange && topStars.length >= 2) {
+      predictions.push({
+        question: `🤼 WWE: ${topStars[0].name} loses the title before ${nextPLE ? nextPLE.name : 'next PLE'}?`,
+        optionA: 'YES — Upset coming', optionB: 'NO — Holds on',
+        category: 'wwe', emoji: '🤼',
+        expiresAt: defaultExpiry,
+        metadata: { ...baseMetadata, predType: 'title_defense', star: topStars[0].name }
+      });
+    }
+
+    // --- Weekly show predictions (always relevant) ---
+    if (topStars.length >= 2 && predictions.length < 4) {
+      predictions.push({
+        question: `🤼 WWE Raw/SmackDown this week: ${topStars[0].name} vs ${topStars[1].name} — Who stands tall?`,
+        optionA: topStars[0].name, optionB: topStars[1].name,
+        category: 'wwe', emoji: '🤼',
+        expiresAt: expiresInHours(72),
+        metadata: { ...baseMetadata, predType: 'weekly_show', star1: topStars[0].name, star2: topStars[1].name }
+      });
+    }
+
+    // --- Hot take / fan debate ---
+    if (topStars.length >= 1) {
+      const debateTemplates = [
+        { q: `🤼 WWE: Best in the world right now?`, a: topStars[0].name, b: topStars.length >= 2 ? topStars[1].name : 'Someone else', type: 'best_itw' },
+        { q: `🤼 WWE: Rating this week's Raw/SmackDown?`, a: 'Banger — Must watch', b: 'Mid — Skippable', type: 'show_rating' },
+        { q: `🤼 WWE: ${topStars[0].name} — Champion by end of year?`, a: 'YES — Destiny', b: 'NO — Not yet', type: 'year_end' },
+      ];
+      const debate = debateTemplates[Math.floor(Math.random() * debateTemplates.length)];
+      predictions.push({
+        question: debate.q,
+        optionA: debate.a, optionB: debate.b,
+        category: 'wwe', emoji: '🤼',
+        expiresAt: expiresInHours(72),
+        metadata: { ...baseMetadata, predType: debate.type }
+      });
+    }
+
+    // Fallback if nothing detected
+    if (predictions.length === 0 && topStars.length >= 2) {
+      predictions.push({
+        question: `🤼 WWE: ${topStars[0].name} vs ${topStars[1].name} — Dream match, who wins?`,
+        optionA: topStars[0].name, optionB: topStars[1].name,
+        category: 'wwe', emoji: '🤼',
+        expiresAt: expiresInHours(72),
+        metadata: { ...baseMetadata, predType: 'dream_match', star1: topStars[0].name, star2: topStars[1].name }
+      });
+    }
+
+    console.log(`    WWE: ${predictions.length} predictions generated`);
+  } catch (e) {
+    console.error('WWE news engine error:', e.message);
+  }
+  return predictions;
+}
+
+// ============================================
 // MOTOGP NEWS-POWERED GENERATOR
 // Same approach as F1: parse news → extract riders → generate predictions
 // ============================================
@@ -2050,6 +2318,7 @@ const SPORT_GENERATORS = {
   motogp: generateMotoGPLive,
   tennis: generateTennisLive,
   boxing: generateBoxingLive,
+  wwe: generateWWELive,
   rugby: generateRugbyLive,
 };
 
@@ -2496,6 +2765,7 @@ async function liveSportsRefresh(active, counts) {
     { name: 'motogp', generator: generateMotoGPLive, minSlots: 4 },
     { name: 'tennis', generator: generateTennisLive, minSlots: 5 },
     { name: 'boxing', generator: generateBoxingLive, minSlots: 4 },
+    { name: 'wwe', generator: generateWWELive, minSlots: 4 },
   ];
 
   for (const sport of liveSports) {
@@ -2599,7 +2869,7 @@ async function smartGenerate(forceWeekly = false) {
   console.log(`Total active: ${active.length}`);
 
   // --- Decide if we need a weekly sports fetch ---
-  const sportCategories = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1', 'motogp', 'tennis', 'boxing'];
+  const sportCategories = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1', 'motogp', 'tennis', 'boxing', 'wwe'];
   const totalSportPreds = sportCategories.reduce((sum, cat) => sum + (counts[cat] || 0), 0);
 
   // Only count predictions that have metadata (= generated by new engine, not old static)
@@ -2653,7 +2923,7 @@ async function startScheduler() {
 
   // On startup: always do a full weekly fetch to fill the app
   const active = await db.getActivePredictions();
-  const sportCategories = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1', 'motogp', 'tennis', 'boxing'];
+  const sportCategories = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1', 'motogp', 'tennis', 'boxing', 'wwe'];
   const totalSport = sportCategories.reduce((sum, cat) => sum + active.filter(p => p.category === cat).length, 0);
 
   if (totalSport < 10) {
