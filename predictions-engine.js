@@ -3319,6 +3319,25 @@ async function smartGenerate(forceWeekly = false) {
     console.log(`  Sports: ${realSportPreds} real sport predictions active, skipping API (next fetch: Monday morning)`);
   }
 
+  // --- MMA mid-week fetch (Thu/Fri) — free plan only gives 3 days, Saturday cards need a late fetch ---
+  const isMMADay = (dayOfWeek === 4 || dayOfWeek === 5); // Thursday or Friday
+  const combatCount = counts.combat || 0;
+  if (isMMADay && combatCount < 3) {
+    console.log(`  MMA MID-WEEK FETCH: ${combatCount} combat preds, fetching weekend card...`);
+    try {
+      const mmaPreds = await generateCombatLive();
+      for (const pred of mmaPreds) {
+        if (await addIfNotDupe(pred, active)) {
+          totalGenerated++;
+          active.push(pred);
+        }
+      }
+      if (mmaPreds.length > 0) console.log(`  combat mid-week: +${mmaPreds.length} new`);
+    } catch (e) {
+      console.error('  MMA mid-week fetch error:', e.message);
+    }
+  }
+
   // --- Always run crypto + news + opinion backup ---
   totalGenerated += await lightCycle(active, counts);
 
