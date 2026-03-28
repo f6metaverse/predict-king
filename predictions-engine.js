@@ -64,6 +64,7 @@ const MIN_SLOTS = {
   nba: 6,
   combat: 5,
   f1: 4,
+  motogp: 4,
   nfl: 4,
   hockey: 6,
   rugby: 3,
@@ -1250,6 +1251,278 @@ async function generateRugbyLive() {
   return predictions;
 }
 
+// ============================================
+// MOTOGP NEWS-POWERED GENERATOR
+// Same approach as F1: parse news → extract riders → generate predictions
+// ============================================
+
+const MOTOGP_CALENDAR_2026 = [
+  { name: 'Thai Grand Prix', month: 3, day: 1 },
+  { name: 'Brazilian Grand Prix', month: 3, day: 22 },
+  { name: 'Americas Grand Prix', month: 3, day: 29 },
+  { name: 'Spanish Grand Prix', month: 4, day: 26 },
+  { name: 'French Grand Prix', month: 5, day: 10 },
+  { name: 'Catalan Grand Prix', month: 5, day: 17 },
+  { name: 'Italian Grand Prix', month: 5, day: 31 },
+  { name: 'Hungarian Grand Prix', month: 6, day: 7 },
+  { name: 'Czech Grand Prix', month: 6, day: 21 },
+  { name: 'Dutch Grand Prix', month: 6, day: 28 },
+  { name: 'German Grand Prix', month: 7, day: 12 },
+  { name: 'British Grand Prix', month: 8, day: 9 },
+  { name: 'Aragon Grand Prix', month: 8, day: 30 },
+  { name: 'San Marino Grand Prix', month: 9, day: 13 },
+  { name: 'Austrian Grand Prix', month: 9, day: 20 },
+  { name: 'Japanese Grand Prix', month: 10, day: 4 },
+  { name: 'Indonesian Grand Prix', month: 10, day: 11 },
+  { name: 'Australian Grand Prix', month: 10, day: 25 },
+  { name: 'Malaysian Grand Prix', month: 11, day: 1 },
+  { name: 'Qatar Grand Prix', month: 11, day: 8 },
+  { name: 'Portuguese Grand Prix', month: 11, day: 22 },
+  { name: 'Valencia Grand Prix', month: 11, day: 29 },
+];
+
+const MOTOGP_RIDERS = [
+  // Ducati Lenovo
+  { name: 'Marquez', full: 'Marc Marquez', team: 'Ducati Lenovo' },
+  { name: 'Bagnaia', full: 'Francesco Bagnaia', team: 'Ducati Lenovo' },
+  // Aprilia
+  { name: 'Martin', full: 'Jorge Martin', team: 'Aprilia' },
+  { name: 'Bezzecchi', full: 'Marco Bezzecchi', team: 'Aprilia' },
+  // Red Bull KTM
+  { name: 'Acosta', full: 'Pedro Acosta', team: 'KTM' },
+  { name: 'Binder', full: 'Brad Binder', team: 'KTM' },
+  // Yamaha
+  { name: 'Quartararo', full: 'Fabio Quartararo', team: 'Yamaha' },
+  { name: 'Rins', full: 'Alex Rins', team: 'Yamaha' },
+  // Honda
+  { name: 'Mir', full: 'Joan Mir', team: 'Honda' },
+  { name: 'Marini', full: 'Luca Marini', team: 'Honda' },
+  // Gresini Ducati
+  { name: 'A. Marquez', full: 'Alex Marquez', team: 'Gresini Ducati' },
+  { name: 'Aldeguer', full: 'Fermin Aldeguer', team: 'Gresini Ducati' },
+  // VR46 Ducati
+  { name: 'Di Giannantonio', full: 'Fabio Di Giannantonio', team: 'VR46 Ducati' },
+  { name: 'Morbidelli', full: 'Franco Morbidelli', team: 'VR46 Ducati' },
+  // Pramac Yamaha
+  { name: 'Razgatlioglu', full: 'Toprak Razgatlioglu', team: 'Pramac Yamaha' },
+  { name: 'Miller', full: 'Jack Miller', team: 'Pramac Yamaha' },
+  // Tech3 KTM
+  { name: 'Vinales', full: 'Maverick Vinales', team: 'Tech3 KTM' },
+  { name: 'Bastianini', full: 'Enea Bastianini', team: 'Tech3 KTM' },
+  // Trackhouse Aprilia
+  { name: 'R. Fernandez', full: 'Raul Fernandez', team: 'Trackhouse' },
+  { name: 'Ogura', full: 'Ai Ogura', team: 'Trackhouse' },
+  // LCR Honda
+  { name: 'Moreira', full: 'Diogo Moreira', team: 'LCR Honda' },
+  { name: 'Zarco', full: 'Johann Zarco', team: 'LCR Honda' },
+];
+
+const MOTOGP_TEAMS = [
+  'Ducati', 'Aprilia', 'KTM', 'Yamaha', 'Honda',
+  'Gresini', 'VR46', 'Pramac', 'Tech3', 'Trackhouse', 'LCR'
+];
+
+const MOTOGP_GP_ALIASES = {
+  'Thai': ['thailand', 'thai', 'buriram', 'chang'],
+  'Brazilian': ['brazil', 'goiania', 'brazilian'],
+  'Americas': ['americas', 'austin', 'cota'],
+  'Spanish': ['jerez', 'spanish'],
+  'French': ['france', 'le mans', 'french'],
+  'Catalan': ['catalunya', 'barcelona', 'catalan'],
+  'Italian': ['mugello', 'italian', 'italy'],
+  'Hungarian': ['hungary', 'balaton', 'hungarian'],
+  'Czech': ['brno', 'czech'],
+  'Dutch': ['assen', 'dutch', 'netherlands'],
+  'German': ['sachsenring', 'german', 'germany'],
+  'British': ['silverstone', 'british'],
+  'Aragon': ['aragon', 'motorland'],
+  'San Marino': ['misano', 'san marino'],
+  'Austrian': ['red bull ring', 'spielberg', 'austrian'],
+  'Japanese': ['motegi', 'japan', 'japanese'],
+  'Indonesian': ['mandalika', 'indonesia', 'indonesian'],
+  'Australian': ['phillip island', 'australia', 'australian'],
+  'Malaysian': ['sepang', 'malaysia', 'malaysian'],
+  'Qatar': ['qatar', 'lusail'],
+  'Portuguese': ['portimao', 'portugal', 'portuguese'],
+  'Valencia': ['valencia', 'ricardo tormo'],
+};
+
+async function generateMotoGPLive() {
+  const predictions = [];
+  try {
+    if (!NEWS_API_KEY) return predictions;
+
+    // Step 1: Find the next race from calendar
+    const now = new Date();
+    const nextRace = MOTOGP_CALENDAR_2026.find(race => {
+      const raceDate = new Date(Date.UTC(2026, race.month - 1, race.day, 13, 0));
+      return raceDate > now;
+    });
+
+    if (!nextRace) {
+      console.log('    MotoGP: No upcoming races left in 2026 calendar');
+      return predictions;
+    }
+
+    const raceDate = new Date(Date.UTC(2026, nextRace.month - 1, nextRace.day, 13, 0));
+    const expiry = raceDate.toISOString();
+    const gpShort = nextRace.name.replace(' Grand Prix', '');
+    const gpName = nextRace.name;
+
+    console.log(`    MotoGP: Next race = ${gpName} (${raceDate.toISOString().split('T')[0]})`);
+
+    // Step 2: Fetch MotoGP news from NewsData
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=sports&qInTitle=MotoGP%20OR%20Moto%20GP%20OR%20${encodeURIComponent(gpShort + ' Grand Prix')}&removeduplicate=1`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    const articles = (data.results || []).filter(a => a.title && a.title.length >= 15);
+    console.log(`    MotoGP: ${articles.length} news articles found`);
+
+    // Step 3: Parse articles — count rider/team mentions
+    const riderMentions = {};
+    const teamMentions = {};
+
+    for (const rider of MOTOGP_RIDERS) {
+      const nameLC = rider.name.toLowerCase();
+      const fullLC = rider.full.toLowerCase();
+      // Also match last name only (e.g. "Bagnaia" from "Francesco Bagnaia")
+      const lastNameLC = rider.full.split(' ').pop().toLowerCase();
+      let count = 0;
+      for (const article of articles) {
+        const text = `${article.title} ${article.description || ''} ${(article.keywords || []).join(' ')}`.toLowerCase();
+        if (text.includes(lastNameLC) || text.includes(fullLC)) count++;
+      }
+      if (count > 0) riderMentions[rider.name] = { ...rider, count };
+    }
+
+    for (const team of MOTOGP_TEAMS) {
+      const teamLC = team.toLowerCase();
+      let count = 0;
+      for (const article of articles) {
+        const text = `${article.title} ${article.description || ''} ${(article.keywords || []).join(' ')}`.toLowerCase();
+        if (text.includes(teamLC)) count++;
+      }
+      if (count > 0) teamMentions[team] = count;
+    }
+
+    const topRiders = Object.values(riderMentions).sort((a, b) => b.count - a.count);
+    const topTeams = Object.entries(teamMentions).sort((a, b) => b[1] - a[1]).map(([name]) => name);
+
+    console.log(`    MotoGP: Top riders in news: ${topRiders.slice(0, 5).map(r => `${r.name}(${r.count})`).join(', ')}`);
+
+    const baseMetadata = {
+      apiType: 'motogp',
+      source: 'newsdata',
+      raceName: gpName,
+      raceDate: expiry
+    };
+
+    // Step 4: Generate predictions
+
+    // --- Head-to-head: top 2 riders ---
+    if (topRiders.length >= 2) {
+      predictions.push({
+        question: `🏍 MotoGP ${gpName}: ${topRiders[0].full} vs ${topRiders[1].full} — Who finishes ahead?`,
+        optionA: topRiders[0].name, optionB: topRiders[1].name,
+        category: 'motogp', emoji: '🏍',
+        expiresAt: expiry,
+        metadata: { ...baseMetadata, predType: 'head_to_head', rider1: topRiders[0].full, rider2: topRiders[1].full }
+      });
+    }
+
+    // --- Podium for 3rd most mentioned rider ---
+    if (topRiders.length >= 3) {
+      predictions.push({
+        question: `🏍 MotoGP ${gpName}: ${topRiders[2].full} on the podium?`,
+        optionA: 'YES — Podium', optionB: 'NO — Misses out',
+        category: 'motogp', emoji: '🏍',
+        expiresAt: expiry,
+        metadata: { ...baseMetadata, predType: 'podium', rider: topRiders[2].full }
+      });
+    }
+
+    // --- Manufacturer battle ---
+    if (topTeams.length >= 2) {
+      predictions.push({
+        question: `🏍 MotoGP ${gpName}: ${topTeams[0]} vs ${topTeams[1]} — Best manufacturer this weekend?`,
+        optionA: topTeams[0], optionB: topTeams[1],
+        category: 'motogp', emoji: '🏍',
+        expiresAt: expiry,
+        metadata: { ...baseMetadata, predType: 'team_battle', team1: topTeams[0], team2: topTeams[1] }
+      });
+    }
+
+    // --- Pole position for top rider ---
+    if (topRiders.length >= 1) {
+      predictions.push({
+        question: `🏍 MotoGP ${gpName} Qualifying: Pole for ${topRiders[0].full}?`,
+        optionA: 'YES — P1', optionB: 'NO — Someone else',
+        category: 'motogp', emoji: '🏍',
+        expiresAt: expiry,
+        metadata: { ...baseMetadata, predType: 'pole', rider: topRiders[0].full }
+      });
+    }
+
+    // --- Teammate battle ---
+    const teamRiderPairs = {};
+    for (const r of topRiders) {
+      if (!teamRiderPairs[r.team]) teamRiderPairs[r.team] = [];
+      teamRiderPairs[r.team].push(r);
+    }
+    for (const [team, riders] of Object.entries(teamRiderPairs)) {
+      if (riders.length >= 2) {
+        predictions.push({
+          question: `🏍 MotoGP ${gpName}: ${team} duel — ${riders[0].name} or ${riders[1].name}?`,
+          optionA: riders[0].name, optionB: riders[1].name,
+          category: 'motogp', emoji: '🏍',
+          expiresAt: expiry,
+          metadata: { ...baseMetadata, predType: 'teammate_battle', team, rider1: riders[0].full, rider2: riders[1].full }
+        });
+        break;
+      }
+    }
+
+    // --- Race drama ---
+    const dramaTemplates = [
+      { q: `🏍 MotoGP ${gpName}: Crash in the top 5?`, a: 'YES — Drama', b: 'NO — Clean race', type: 'crash' },
+      { q: `🏍 MotoGP ${gpName}: Last lap overtake for the win?`, a: 'YES — Epic finish', b: 'NO — Controlled win', type: 'last_lap' },
+      { q: `🏍 MotoGP ${gpName}: Winner by more than 3 seconds?`, a: 'YES — Dominant', b: 'NO — Close race', type: 'margin' },
+    ];
+    const drama = dramaTemplates[Math.floor(Math.random() * dramaTemplates.length)];
+    predictions.push({
+      question: drama.q,
+      optionA: drama.a, optionB: drama.b,
+      category: 'motogp', emoji: '🏍',
+      expiresAt: expiry,
+      metadata: { ...baseMetadata, predType: drama.type }
+    });
+
+    // Fallback if not enough riders found in news
+    if (topRiders.length < 2) {
+      console.log('    MotoGP: Not enough rider data from news, adding generic templates');
+      const fallbacks = [
+        { q: `🏍 MotoGP ${gpName}: Ducati wins again?`, a: 'YES — Ducati dominance', b: 'NO — Another manufacturer', type: 'ducati' },
+        { q: `🏍 MotoGP ${gpName}: Rookie in the top 5?`, a: 'YES', b: 'NO', type: 'rookie' },
+        { q: `🏍 MotoGP ${gpName}: Flag-to-flag race (rain)?`, a: 'YES — Wet race', b: 'NO — Dry race', type: 'rain' },
+      ];
+      for (const fb of fallbacks) {
+        predictions.push({
+          question: fb.q, optionA: fb.a, optionB: fb.b,
+          category: 'motogp', emoji: '🏍',
+          expiresAt: expiry,
+          metadata: { ...baseMetadata, predType: fb.type }
+        });
+      }
+    }
+
+    console.log(`    MotoGP: ${predictions.length} predictions generated for ${gpName}`);
+  } catch (e) {
+    console.error('MotoGP news engine error:', e.message);
+  }
+  return predictions;
+}
+
 // Map sport names to their generators
 const SPORT_GENERATORS = {
   football: generateFootballLive,
@@ -1258,6 +1531,7 @@ const SPORT_GENERATORS = {
   hockey: generateHockeyLive,
   combat: generateCombatLive,
   f1: generateF1Live,
+  motogp: generateMotoGPLive,
   rugby: generateRugbyLive,
 };
 
@@ -1665,7 +1939,7 @@ async function weeklySportsFetch(active) {
   console.log('  WEEKLY SPORTS FETCH — loading all upcoming events...');
   let totalGenerated = 0;
 
-  const allSports = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1'];
+  const allSports = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1', 'motogp'];
 
   for (const sport of allSports) {
     const generator = SPORT_GENERATORS[sport];
@@ -1759,7 +2033,7 @@ async function smartGenerate(forceWeekly = false) {
   console.log(`Total active: ${active.length}`);
 
   // --- Decide if we need a weekly sports fetch ---
-  const sportCategories = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1'];
+  const sportCategories = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1', 'motogp'];
   const totalSportPreds = sportCategories.reduce((sum, cat) => sum + (counts[cat] || 0), 0);
 
   // Only count predictions that have metadata (= generated by new engine, not old static)
@@ -1812,7 +2086,7 @@ async function startScheduler() {
 
   // On startup: always do a full weekly fetch to fill the app
   const active = await db.getActivePredictions();
-  const sportCategories = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1'];
+  const sportCategories = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1', 'motogp'];
   const totalSport = sportCategories.reduce((sum, cat) => sum + active.filter(p => p.category === cat).length, 0);
 
   if (totalSport < 10) {
