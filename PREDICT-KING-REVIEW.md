@@ -358,9 +358,10 @@ CAUSE :
 1. L'engine generait des predictions pour des ligues inconnues (U18, amateur, divisions inferieures) mal couvertes par l'API free
 2. L'auto-resolve ne detectait pas les matchs fantomes (NS apres kickoff = l'API ne mettra jamais a jour)
 
-FIX (2 couches) :
+FIX (3 couches) :
 1. **Engine** : Football ne genere QUE pour les ligues connues (Tier 1/2/3, 36 ligues). Rugby QUE pour les top leagues (Top 14, Premiership, URC, Super Rugby, MLR, Top League Japan). Plus jamais de matchs amateur/U18.
-2. **Auto-resolve** : Les 5 sports (Football, NBA, Hockey, NFL, Rugby) skipent immediatement les matchs avec status NS/PST/CANC/TBD au lieu de les re-checker en boucle. 0 appel API gaspille sur les matchs fantomes.
+2. **Auto-resolve skip** : Les 5 sports (Football, NBA, Hockey, NFL, Rugby) detectent les matchs NS/PST/CANC/TBD.
+3. **Ghost match blacklist** (`ghostMatches` Set en memoire) : Quand un match retourne NS/PST/CANC, son ID est blackliste. Tous les checks suivants skipent AVANT l'appel API → **0 appel gaspille** apres la premiere detection. La blacklist vit en memoire (se reset au redeploy, ce qui est ok car le startup skip empeche la generation).
 
 REGLE : **Ne JAMAIS generer de predictions pour des ligues qui ne sont pas dans nos listes whitelist. L'API free ne couvre pas les ligues mineures correctement → matchs fantomes → quota burn → ban.**
 
@@ -457,7 +458,7 @@ package.json           — Dependencies (express, pg, dotenv, node-telegram-bot-
 | NewsData | ~85 (8 cycles x ~11 appels: 4 rotation + 7 live sports) | 200/jour | ~43% |
 | CoinGecko | ~8 (toutes les 3h) | 30/min | negligeable |
 
-**IMPORTANT — Compte API-Sports #3** (cle: `233357...1968`, compte Paul Juliaks). Les 2 premiers comptes ont ete bannis le 28/03/2026.
+**IMPORTANT — Compte API-Sports #4** (cle: `f4c2da...cabb`, compte Yo Maz). Les 3 premiers comptes ont ete bannis le 28/03/2026.
 
 **REGLES QUOTA CRITIQUES** :
 1. **Ne JAMAIS ajouter de ligues** sans verifier qu'elles sont bien couvertes par l'API free → matchs fantomes → quota burn → ban
@@ -473,7 +474,8 @@ package.json           — Dependencies (express, pg, dotenv, node-telegram-bot-
 |------|----------|-------|-----|
 | 28/03/2026 | Compte API-Sports #1 banni | Auto-resolve spammait les scores pendant les matchs (6-12 appels/match) | Smart delay par sport + max retries + nouveau compte |
 | 28/03/2026 | Rugby 66% quota (3 matchs) | Matchs de ligues mineures (amateur, U18) bloques en NS sur l'API → auto-resolve spam en boucle | Engine: whitelist ligues connues uniquement. Auto-resolve: skip NS/PST/CANC immediatement |
-| 28/03/2026 | Compte API-Sports #2 banni | Ghost matches encore actifs au moment du fix + multiples redeploys chacun forcant un weekly fetch complet (~41 appels) | Startup skip si 50+ preds actives. Plus de forceWeekly au redeploy |
+| 28/03/2026 | Compte API-Sports #2 banni | Ghost matches encore actifs + multiples redeploys forcant un weekly fetch (~41 appels chacun) | Startup skip si 50+ preds actives. Plus de forceWeekly au redeploy |
+| 28/03/2026 | Compte API-Sports #3 banni | Le skip NS faisait l'appel API PUIS ignorait le resultat. Ghost matches brulaient encore du quota a chaque cycle | Ghost match blacklist: 1er appel = detection + blacklist, tous les suivants = 0 appel API |
 | 28/03/2026 | NewsData quota cramer | 6 redeploys x 11 appels + categories mortes (golf, cycling, esports, athletics, etc.) dans la rotation = trop d'appels | Vire 4 cycles morts (15→12), startup skip, plus de categories fantomes |
 | 28/03/2026 | WWE 0 predictions ever | Query NewsData cassee ("Raw wrestling" = phrase exacte), WrestleMania skip (21.2j > limite 21j), NXT Roadblock prioritise sur WrestleMania | Fix query (Raw OR wrestling), fenetre 28j, priorite mega > major > nxt |
 | 28/03/2026 | MMA invisible en semaine | Free plan = 3 jours, weekly fetch lundi, UFC le samedi = hors range | Mid-week fetch jeudi/vendredi pour choper le card du weekend |
@@ -508,4 +510,4 @@ Categories actives dans la rotation : crypto, musique, gaming, cinema, drama, po
 
 ---
 
-*Document mis a jour le 28 Mars 2026 — Version 2.2*
+*Document mis a jour le 28 Mars 2026 — Version 2.3*
