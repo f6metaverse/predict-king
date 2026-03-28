@@ -66,6 +66,7 @@ const MIN_SLOTS = {
   f1: 4,
   motogp: 4,
   tennis: 5,
+  boxing: 4,
   nfl: 4,
   hockey: 6,
   rugby: 3,
@@ -1529,6 +1530,204 @@ async function generateTennisLive() {
 }
 
 // ============================================
+// BOXING NEWS-POWERED GENERATOR
+// No calendar — 100% driven by fight announcements in the news
+// Detects fighter names + matchups from article titles
+// ============================================
+
+const BOXING_FIGHTERS = [
+  // Pound-for-pound elite
+  { name: 'Usyk', full: 'Oleksandr Usyk', weight: 'Heavyweight', country: '🇺🇦' },
+  { name: 'Inoue', full: 'Naoya Inoue', weight: 'Jr. Featherweight', country: '🇯🇵' },
+  { name: 'Stevenson', full: 'Shakur Stevenson', weight: 'Jr. Welterweight', country: '🇺🇸' },
+  { name: 'Bivol', full: 'Dmitry Bivol', weight: 'Light Heavyweight', country: '🇷🇺' },
+  { name: 'Bam Rodriguez', full: 'Jesse Rodriguez', weight: 'Jr. Bantamweight', country: '🇺🇸' },
+  // Heavyweights
+  { name: 'Fury', full: 'Tyson Fury', weight: 'Heavyweight', country: '🇬🇧' },
+  { name: 'Joshua', full: 'Anthony Joshua', weight: 'Heavyweight', country: '🇬🇧' },
+  { name: 'Wilder', full: 'Deontay Wilder', weight: 'Heavyweight', country: '🇺🇸' },
+  { name: 'Dubois', full: 'Daniel Dubois', weight: 'Heavyweight', country: '🇬🇧' },
+  // Big names
+  { name: 'Canelo', full: 'Canelo Alvarez', weight: 'Super Middleweight', country: '🇲🇽' },
+  { name: 'Benavidez', full: 'David Benavidez', weight: 'Cruiserweight', country: '🇺🇸' },
+  { name: 'Beterbiev', full: 'Artur Beterbiev', weight: 'Light Heavyweight', country: '🇷🇺' },
+  { name: 'Teofimo', full: 'Teofimo Lopez', weight: 'Jr. Welterweight', country: '🇺🇸' },
+  { name: 'Tank', full: 'Gervonta Davis', weight: 'Lightweight', country: '🇺🇸' },
+  { name: 'Haney', full: 'Devin Haney', weight: 'Jr. Welterweight', country: '🇺🇸' },
+  { name: 'Spence', full: 'Errol Spence Jr.', weight: 'Welterweight', country: '🇺🇸' },
+  { name: 'Crawford', full: 'Terence Crawford', weight: 'Welterweight', country: '🇺🇸' },
+  { name: 'Fundora', full: 'Sebastian Fundora', weight: 'Jr. Middleweight', country: '🇺🇸' },
+  { name: 'Thurman', full: 'Keith Thurman', weight: 'Jr. Middleweight', country: '🇺🇸' },
+  { name: 'Nakatani', full: 'Junto Nakatani', weight: 'Jr. Featherweight', country: '🇯🇵' },
+  // Women's boxing stars
+  { name: 'Katie Taylor', full: 'Katie Taylor', weight: 'Lightweight', country: '🇮🇪' },
+  { name: 'Serrano', full: 'Amanda Serrano', weight: 'Featherweight', country: '🇵🇷' },
+  { name: 'C. Dubois', full: 'Caroline Dubois', weight: 'Lightweight', country: '🇬🇧' },
+  // Legends (comeback/exhibition)
+  { name: 'Mayweather', full: 'Floyd Mayweather', weight: 'Welterweight', country: '🇺🇸' },
+  { name: 'Pacquiao', full: 'Manny Pacquiao', weight: 'Welterweight', country: '🇵🇭' },
+];
+
+async function generateBoxingLive() {
+  const predictions = [];
+  try {
+    if (!NEWS_API_KEY) return predictions;
+
+    // Fetch boxing news
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWS_API_KEY}&language=en&category=sports&qInTitle=boxing%20OR%20boxer%20OR%20title%20fight%20OR%20heavyweight%20OR%20knockout%20OR%20undisputed%20OR%20WBC%20OR%20WBA%20OR%20IBF%20OR%20WBO&removeduplicate=1`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    const articles = (data.results || []).filter(a => a.title && a.title.length >= 15);
+    console.log(`    Boxing: ${articles.length} news articles found`);
+
+    if (articles.length === 0) return predictions;
+
+    // Step 1: Count fighter mentions
+    const fighterMentions = {};
+
+    for (const fighter of BOXING_FIGHTERS) {
+      const lastNameLC = fighter.full.split(' ').pop().toLowerCase();
+      const nameLC = fighter.name.toLowerCase();
+      let count = 0;
+      for (const article of articles) {
+        const text = `${article.title} ${article.description || ''} ${(article.keywords || []).join(' ')}`.toLowerCase();
+        if (text.includes(lastNameLC) || text.includes(nameLC)) count++;
+      }
+      if (count > 0) fighterMentions[fighter.name] = { ...fighter, count };
+    }
+
+    const topFighters = Object.values(fighterMentions).sort((a, b) => b.count - a.count);
+    console.log(`    Boxing: Top fighters in news: ${topFighters.slice(0, 5).map(f => `${f.name}(${f.count})`).join(', ')}`);
+
+    // Step 2: Detect matchups from article titles ("A vs B", "A fights B", "A v B")
+    const matchups = [];
+    const vsRegex = /([A-Z][\w'-]+(?:\s[A-Z][\w'-]+)*)\s+(?:vs\.?|v\.?|versus|fights?|facing|meets)\s+([A-Z][\w'-]+(?:\s[A-Z][\w'-]+)*)/gi;
+
+    for (const article of articles) {
+      const text = article.title;
+      let match;
+      while ((match = vsRegex.exec(text)) !== null) {
+        const name1 = match[1].trim();
+        const name2 = match[2].trim();
+        // Try to match to known fighters
+        const f1 = BOXING_FIGHTERS.find(f =>
+          name1.toLowerCase().includes(f.full.split(' ').pop().toLowerCase()) ||
+          name1.toLowerCase().includes(f.name.toLowerCase())
+        );
+        const f2 = BOXING_FIGHTERS.find(f =>
+          name2.toLowerCase().includes(f.full.split(' ').pop().toLowerCase()) ||
+          name2.toLowerCase().includes(f.name.toLowerCase())
+        );
+        if (f1 && f2 && f1.name !== f2.name) {
+          matchups.push({ fighter1: f1, fighter2: f2, source: article.title });
+        }
+      }
+    }
+
+    console.log(`    Boxing: ${matchups.length} matchups detected in headlines`);
+
+    const baseMetadata = {
+      apiType: 'boxing',
+      source: 'newsdata'
+    };
+
+    // Use smart expiry — fights are usually announced for "this weekend" or "next month"
+    const defaultExpiry = expiresInHours(72); // 3 days default
+
+    // Step 3: Generate predictions from detected matchups
+    const usedMatchups = new Set();
+
+    for (const matchup of matchups) {
+      const key = [matchup.fighter1.name, matchup.fighter2.name].sort().join('-');
+      if (usedMatchups.has(key)) continue;
+      usedMatchups.add(key);
+
+      const f1 = matchup.fighter1;
+      const f2 = matchup.fighter2;
+      const fightExpiry = getSmartExpiry(matchup.source, '');
+
+      // Winner prediction
+      predictions.push({
+        question: `🥊 ${f1.full} ${f1.country} vs ${f2.full} ${f2.country} — Who wins?`,
+        optionA: f1.name, optionB: f2.name,
+        category: 'boxing', emoji: '🥊',
+        expiresAt: fightExpiry,
+        metadata: { ...baseMetadata, predType: 'winner', fighter1: f1.full, fighter2: f2.full }
+      });
+
+      // KO or Decision
+      predictions.push({
+        question: `🥊 ${f1.name} vs ${f2.name} — KO/TKO or Decision?`,
+        optionA: 'KO / TKO', optionB: 'Goes to Decision',
+        category: 'boxing', emoji: '🥊',
+        expiresAt: fightExpiry,
+        metadata: { ...baseMetadata, predType: 'method', fighter1: f1.full, fighter2: f2.full }
+      });
+
+      // Early or late stoppage (if both are known KO artists)
+      predictions.push({
+        question: `🥊 ${f1.name} vs ${f2.name} — Over or Under 6 rounds?`,
+        optionA: 'Under 6 — Early finish', optionB: 'Over 6 — Goes long',
+        category: 'boxing', emoji: '🥊',
+        expiresAt: fightExpiry,
+        metadata: { ...baseMetadata, predType: 'rounds', fighter1: f1.full, fighter2: f2.full }
+      });
+
+      if (predictions.length >= 9) break; // Max 3 matchups x 3 predictions
+    }
+
+    // Step 4: If no matchup detected, use top fighters for general predictions
+    if (matchups.length === 0 && topFighters.length >= 2) {
+      console.log('    Boxing: No matchups in headlines, using top mentioned fighters');
+
+      const f1 = topFighters[0];
+      const f2 = topFighters[1];
+
+      predictions.push({
+        question: `🥊 Boxing: ${f1.full} ${f1.country} vs ${f2.full} ${f2.country} — Who would you pick?`,
+        optionA: f1.name, optionB: f2.name,
+        category: 'boxing', emoji: '🥊',
+        expiresAt: defaultExpiry,
+        metadata: { ...baseMetadata, predType: 'fantasy_matchup', fighter1: f1.full, fighter2: f2.full }
+      });
+
+      if (topFighters.length >= 3) {
+        predictions.push({
+          question: `🥊 ${topFighters[2].full} ${topFighters[2].country} — Next fight ends in KO?`,
+          optionA: 'YES — KO', optionB: 'NO — Decision',
+          category: 'boxing', emoji: '🥊',
+          expiresAt: defaultExpiry,
+          metadata: { ...baseMetadata, predType: 'ko_prediction', fighter: topFighters[2].full }
+        });
+      }
+    }
+
+    // Step 5: Hot take / drama prediction
+    if (topFighters.length >= 1) {
+      const dramaTemplates = [
+        { q: `🥊 Boxing: Upset of the year coming soon?`, a: 'YES — Underdog wins', b: 'NO — Favorites keep winning', type: 'upset' },
+        { q: `🥊 Boxing: Is ${topFighters[0].full} the best P4P right now?`, a: `YES — ${topFighters[0].name} is #1`, b: 'NO — Someone else', type: 'p4p' },
+        { q: `🥊 Boxing: Next big KO will be in the heavyweight division?`, a: 'YES — Heavyweights deliver', b: 'NO — Lighter weight class', type: 'ko_division' },
+      ];
+      const drama = dramaTemplates[Math.floor(Math.random() * dramaTemplates.length)];
+      predictions.push({
+        question: drama.q,
+        optionA: drama.a, optionB: drama.b,
+        category: 'boxing', emoji: '🥊',
+        expiresAt: defaultExpiry,
+        metadata: { ...baseMetadata, predType: drama.type }
+      });
+    }
+
+    console.log(`    Boxing: ${predictions.length} predictions generated`);
+  } catch (e) {
+    console.error('Boxing news engine error:', e.message);
+  }
+  return predictions;
+}
+
+// ============================================
 // MOTOGP NEWS-POWERED GENERATOR
 // Same approach as F1: parse news → extract riders → generate predictions
 // ============================================
@@ -1810,6 +2009,7 @@ const SPORT_GENERATORS = {
   f1: generateF1Live,
   motogp: generateMotoGPLive,
   tennis: generateTennisLive,
+  boxing: generateBoxingLive,
   rugby: generateRugbyLive,
 };
 
@@ -2255,6 +2455,7 @@ async function liveSportsRefresh(active, counts) {
     { name: 'f1', generator: generateF1Live, minSlots: 4 },
     { name: 'motogp', generator: generateMotoGPLive, minSlots: 4 },
     { name: 'tennis', generator: generateTennisLive, minSlots: 5 },
+    { name: 'boxing', generator: generateBoxingLive, minSlots: 4 },
   ];
 
   for (const sport of liveSports) {
@@ -2358,7 +2559,7 @@ async function smartGenerate(forceWeekly = false) {
   console.log(`Total active: ${active.length}`);
 
   // --- Decide if we need a weekly sports fetch ---
-  const sportCategories = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1', 'motogp', 'tennis'];
+  const sportCategories = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1', 'motogp', 'tennis', 'boxing'];
   const totalSportPreds = sportCategories.reduce((sum, cat) => sum + (counts[cat] || 0), 0);
 
   // Only count predictions that have metadata (= generated by new engine, not old static)
@@ -2412,7 +2613,7 @@ async function startScheduler() {
 
   // On startup: always do a full weekly fetch to fill the app
   const active = await db.getActivePredictions();
-  const sportCategories = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1', 'motogp', 'tennis'];
+  const sportCategories = ['football', 'nba', 'hockey', 'nfl', 'rugby', 'combat', 'f1', 'motogp', 'tennis', 'boxing'];
   const totalSport = sportCategories.reduce((sum, cat) => sum + active.filter(p => p.category === cat).length, 0);
 
   if (totalSport < 10) {
