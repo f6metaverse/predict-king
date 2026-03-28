@@ -95,15 +95,103 @@ function setupTabs() {
   });
 }
 
-// --- Categories ---
+// --- Parent → Sub-category → League system ---
+let currentParent = 'all';
+
+// Parent → children mapping
+const PARENT_CATEGORIES = {
+  all: [],
+  sport: [
+    { cat: 'football', label: '⚽ Football' },
+    { cat: 'nba', label: '🏀 NBA' },
+    { cat: 'combat', label: '🥊 UFC/MMA' },
+    { cat: 'f1', label: '🏎️ F1' },
+    { cat: 'nfl', label: '🏈 NFL' },
+    { cat: 'hockey', label: '🏒 NHL' },
+    { cat: 'rugby', label: '🏉 Rugby' },
+    { cat: 'motogp', label: '🏍 MotoGP' },
+    { cat: 'tennis', label: '🎾 Tennis' },
+    { cat: 'boxing', label: '🥊 Boxing' },
+    { cat: 'wwe', label: '🤼 WWE' },
+  ],
+  crypto: [], // Direct filter, no sub-categories
+  news: [
+    { cat: 'trending', label: '🔥 Trending' },
+    { cat: 'politics', label: '🏛️ Politics' },
+    { cat: 'world', label: '🌍 World' },
+    { cat: 'science', label: '🔬 Science' },
+    { cat: 'health', label: '💪 Health' },
+    { cat: 'crime', label: '🚨 Crime' },
+    { cat: 'environment', label: '🌱 Planet' },
+    { cat: 'business', label: '💼 Business' },
+  ],
+  entertainment: [
+    { cat: 'musique', label: '🎵 Music' },
+    { cat: 'gaming', label: '🎮 Gaming' },
+    { cat: 'cinema', label: '🎬 Movies' },
+    { cat: 'drama', label: '👀 Drama' },
+    { cat: 'food', label: '🍔 Food' },
+    { cat: 'lifestyle', label: '✨ Lifestyle' },
+  ],
+};
+
+// All categories belonging to each parent (for "show all" filtering)
+const PARENT_CATS = {
+  sport: ['football', 'nba', 'combat', 'f1', 'nfl', 'hockey', 'rugby', 'motogp', 'tennis', 'boxing', 'wwe'],
+  crypto: ['crypto'],
+  news: ['trending', 'politics', 'world', 'science', 'health', 'crime', 'environment', 'business'],
+  entertainment: ['musique', 'gaming', 'cinema', 'drama', 'food', 'lifestyle'],
+};
+
 function setupCategories() {
+  // Parent category clicks
   document.querySelectorAll('.cat-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      currentCategory = btn.dataset.cat;
+
+      currentParent = btn.dataset.parent;
+      currentCategory = currentParent === 'crypto' ? 'crypto' : 'all';
+      currentLeague = 'all';
+
+      buildSubCategories();
+      loadPredictions();
+
+      if (tg) tg.HapticFeedback?.impactOccurred('light');
+    });
+  });
+}
+
+function buildSubCategories() {
+  const container = document.getElementById('subCategories');
+  const children = PARENT_CATEGORIES[currentParent];
+
+  // Hide sub-categories for "all" and "crypto" (no children)
+  if (!children || children.length === 0) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
+  // Build sub-category pills — "All" + each child
+  const parentLabel = currentParent === 'sport' ? 'All Sports' : currentParent === 'news' ? 'All News' : 'All';
+  let html = `<button class="subcat-btn active" data-subcat="all">${parentLabel}</button>`;
+  for (const child of children) {
+    html += `<button class="subcat-btn" data-subcat="${child.cat}">${child.label}</button>`;
+  }
+
+  container.innerHTML = html;
+  container.style.display = 'flex';
+
+  // Attach click listeners
+  container.querySelectorAll('.subcat-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.subcat-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentCategory = btn.dataset.subcat === 'all' ? 'all' : btn.dataset.subcat;
       currentLeague = 'all';
       loadPredictions();
+      if (tg) tg.HapticFeedback?.impactOccurred('light');
     });
   });
 }
@@ -198,9 +286,17 @@ async function loadPredictions() {
     const res = await fetch(`/api/predictions?userId=${userId}`);
     const predictions = await res.json();
 
-    let filtered = currentCategory === 'all'
-      ? predictions
-      : predictions.filter(p => p.category === currentCategory);
+    let filtered;
+    if (currentCategory === 'all' && currentParent === 'all') {
+      // Show everything
+      filtered = predictions;
+    } else if (currentCategory === 'all' && PARENT_CATS[currentParent]) {
+      // Parent selected but no sub-category — show all children of this parent
+      filtered = predictions.filter(p => PARENT_CATS[currentParent].includes(p.category));
+    } else {
+      // Specific sub-category selected
+      filtered = predictions.filter(p => p.category === currentCategory);
+    }
 
     // Build league sub-filter (before league filtering, so all pills show)
     buildLeagueFilter(filtered);

@@ -205,6 +205,38 @@ body {
   box-shadow: 0 4px 15px var(--purple-glow);
 }
 
+/* --- SUB-CATEGORY FILTER (Sport/News/Entertainment children) --- */
+.sub-category-filter {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  scrollbar-width: none;
+  margin-top: -4px;
+}
+.sub-category-filter::-webkit-scrollbar { display: none; }
+
+.subcat-btn {
+  padding: 7px 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.3s ease;
+  font-family: inherit;
+}
+
+.subcat-btn.active {
+  background: linear-gradient(135deg, var(--purple), var(--purple-dark));
+  color: white;
+  border-color: var(--purple);
+  box-shadow: 0 2px 10px var(--purple-glow);
+}
+
 /* --- LEAGUE SUB-FILTER --- */
 .league-filter {
   display: flex;
