@@ -548,9 +548,16 @@ async function initPredictions() {
     console.log('Combat cleanup note:', e.message);
   }
 
-  // Force a full generation on startup
-  console.log('Startup: generating fresh predictions...');
-  await generateDailyPredictions();
+  // Startup generation — only if we're low on predictions (avoid burning quota on every redeploy)
+  const activePreds = await db.getActivePredictions();
+  const activeCount = activePreds.length;
+  console.log(`Startup: ${activeCount} active predictions in DB`);
+  if (activeCount < 50) {
+    console.log('Startup: LOW predictions, running full generation...');
+    await generateDailyPredictions();
+  } else {
+    console.log('Startup: enough predictions, skipping generation (saves API quota)');
+  }
 
   startScheduler();
   startResolveScheduler();

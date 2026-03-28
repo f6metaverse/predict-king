@@ -58,7 +58,7 @@ function expiresInHours(hours) {
 
 // Min active predictions per category
 const MIN_SLOTS = {
-  // Sport (API-Sports) — upgraded generators produce more quality predictions
+  // Sport (API-Sports + news-powered)
   crypto: 8,
   football: 8,
   nba: 6,
@@ -84,19 +84,8 @@ const MIN_SLOTS = {
   crime: 1,
   environment: 1,
   business: 1,
-  sports_news: 2,
-  motorsport: 1,
-  tennis: 1,
-  golf: 1,
-  combat_news: 1,
-  cycling: 1,
-  wrestling: 1,
-  athletics: 1,
-  esports: 1,
   lifestyle: 1,
   food: 1,
-  education: 1,
-  tourism: 1,
 };
 
 // ============================================
@@ -144,7 +133,7 @@ const NEWS_ROTATION = [
     { category: 'entertainment', q: 'movie%20OR%20Netflix%20OR%20Disney%20OR%20Marvel%20OR%20series%20OR%20HBO%20OR%20anime', predCat: 'cinema', emoji: '🎬', formats: 'entertainment' },
     { category: 'science', q: null, predCat: 'science', emoji: '🔬', formats: 'science' },
     { endpoint: 'crypto', coin: 'ada,avax,pepe,bnb,matic', predCat: 'crypto', emoji: '📰', formats: 'crypto' },
-    { category: 'sports', qInTitle: 'transfer%20OR%20injury%20OR%20record%20OR%20retire%20OR%20sacked%20OR%20VAR', predCat: 'sports_news', emoji: '⚽', formats: 'sports' },
+    { category: 'crime', q: 'trial%20OR%20arrest%20OR%20fraud%20OR%20investigation', predCat: 'crime', emoji: '🚨', formats: 'crime' },
   ],
   // Cycle 3: Drama/Tech + Health + Lifestyle + Trending
   [
@@ -165,7 +154,7 @@ const NEWS_ROTATION = [
     { category: 'technology', q: 'esports%20OR%20Steam%20OR%20VR%20OR%20console%20OR%20Twitch%20OR%20streamer', predCat: 'gaming', emoji: '🎮', formats: 'entertainment' },
     { category: 'world', q: null, predCat: 'world', emoji: '🌍', formats: 'general', prioritydomain: 'top' },
     { category: 'politics', q: 'election%20OR%20president%20OR%20law%20OR%20vote%20OR%20senate', predCat: 'politics', emoji: '🏛', formats: 'politics' },
-    { category: 'education', q: null, predCat: 'education', emoji: '🎓', formats: 'general' },
+    { category: 'entertainment', q: 'celebrity%20OR%20influencer%20OR%20viral%20OR%20drama', predCat: 'drama', emoji: '👀', formats: 'tech' },
   ],
   // Cycle 6: Cinema + Drama + Science + Crime
   [
@@ -179,14 +168,14 @@ const NEWS_ROTATION = [
     { category: 'health', q: 'fitness%20OR%20mental%20health%20OR%20diet%20OR%20wellness%20OR%20vaccine', predCat: 'health', emoji: '💪', formats: 'health' },
     { category: 'top', q: null, predCat: 'trending', emoji: '🔥', formats: 'general', prioritydomain: 'top' },
     { endpoint: 'crypto', coin: 'btc,eth,doge,xrp', predCat: 'crypto', emoji: '₿', formats: 'crypto' },
-    { category: 'sports', qInTitle: 'Formula%201%20OR%20MotoGP%20OR%20Grand%20Prix%20OR%20NASCAR%20OR%20IndyCar', predCat: 'motorsport', emoji: '🏁', formats: 'motorsport' },
+    { category: 'environment', q: 'climate%20OR%20pollution%20OR%20renewable%20OR%20ocean%20OR%20species', predCat: 'environment', emoji: '🌱', formats: 'environment' },
   ],
   // Cycle 8: Environment + Lifestyle + Business + Tourism
   [
     { category: 'environment', q: 'climate%20OR%20pollution%20OR%20renewable%20OR%20wildfire%20OR%20flood', predCat: 'environment', emoji: '🌱', formats: 'environment' },
     { category: 'lifestyle', q: 'trend%20OR%20viral%20OR%20fashion%20OR%20wellness', predCat: 'lifestyle', emoji: '✨', formats: 'lifestyle' },
     { category: 'business', qInTitle: 'Tesla%20OR%20Amazon%20OR%20Google%20OR%20Microsoft%20OR%20Apple', predCat: 'business', emoji: '💼', formats: 'business' },
-    { category: 'tourism', q: null, predCat: 'tourism', emoji: '✈️', formats: 'lifestyle' },
+    { category: 'entertainment', q: 'concert%20OR%20festival%20OR%20award%20OR%20Grammy%20OR%20premiere', predCat: 'musique', emoji: '🎵', formats: 'entertainment' },
   ],
   // Cycle 9: French news + Drama + Food + World sentiment
   [
@@ -202,33 +191,12 @@ const NEWS_ROTATION = [
     { category: 'politics', q: 'summit%20OR%20debate%20OR%20election%20OR%20hearing%20OR%20vote', predCat: 'politics', emoji: '🏛', formats: 'politics' },
     { category: 'technology', q: 'launch%20OR%20keynote%20OR%20announcement%20OR%20reveal%20OR%20event', predCat: 'drama', emoji: '🚀', formats: 'tech' },
   ],
-  // Cycle 11: TENNIS + GOLF + COMBAT + BUSINESS
+  // Cycle 11: Business + World + Trending + Crypto
   [
-    { category: 'sports', qInTitle: 'tennis%20OR%20Wimbledon%20OR%20Roland%20Garros%20OR%20US%20Open%20OR%20ATP%20OR%20WTA%20OR%20Grand%20Slam', predCat: 'tennis', emoji: '🎾', formats: 'tennis' },
-    { category: 'sports', qInTitle: 'golf%20OR%20Masters%20OR%20PGA%20OR%20Ryder%20Cup%20OR%20Open%20Championship', predCat: 'golf', emoji: '⛳', formats: 'sports' },
-    { category: 'sports', qInTitle: 'boxing%20OR%20UFC%20OR%20Canelo%20OR%20title%20fight%20OR%20knockout%20OR%20weigh-in', predCat: 'combat_news', emoji: '🥊', formats: 'combat_news' },
     { category: 'business', qInTitle: 'IPO%20OR%20merger%20OR%20acquisition%20OR%20earnings', predCat: 'business', emoji: '💼', formats: 'business' },
-  ],
-  // Cycle 12: FOOTBALL DRAMA + MOTORSPORT + CYCLING + CRYPTO
-  [
-    { category: 'sports', qInTitle: 'Premier%20League%20OR%20Champions%20League%20OR%20La%20Liga%20OR%20Serie%20A%20OR%20Ligue%201', predCat: 'sports_news', emoji: '⚽', formats: 'sports' },
-    { category: 'sports', qInTitle: 'F1%20OR%20Formula%201%20OR%20MotoGP%20OR%20rally%20OR%20Le%20Mans%20OR%20WRC', predCat: 'motorsport', emoji: '🏎', formats: 'motorsport' },
-    { category: 'sports', qInTitle: 'Tour%20de%20France%20OR%20cycling%20OR%20Giro%20OR%20Vuelta', predCat: 'cycling', emoji: '🚴', formats: 'sports' },
-    { endpoint: 'crypto', coin: 'btc,eth,sol,doge', predCat: 'crypto', emoji: '₿', formats: 'crypto' },
-  ],
-  // Cycle 13: NBA/NFL NEWS + WRESTLING + ATHLETICS + WORLD
-  [
-    { category: 'sports', qInTitle: 'NBA%20OR%20trade%20OR%20draft%20OR%20MVP%20OR%20All-Star%20OR%20playoffs', predCat: 'sports_news', emoji: '🏀', formats: 'sports' },
-    { category: 'sports', qInTitle: 'WWE%20OR%20WrestleMania%20OR%20Royal%20Rumble%20OR%20AEW', predCat: 'wrestling', emoji: '💪', formats: 'combat_news' },
-    { category: 'sports', qInTitle: 'Olympic%20OR%20marathon%20OR%20sprint%20OR%20world%20record%20OR%20swimming', predCat: 'athletics', emoji: '🏃', formats: 'sports' },
     { category: 'world', q: 'summit%20OR%20treaty%20OR%20sanctions%20OR%20crisis%20OR%20agreement', predCat: 'world', emoji: '🌍', formats: 'general', prioritydomain: 'top' },
-  ],
-  // Cycle 14: ESPORTS + COMBAT + TENNIS + TRENDING
-  [
-    { category: 'sports', qInTitle: 'esports%20OR%20League%20of%20Legends%20OR%20Valorant%20OR%20Counter-Strike%20OR%20Worlds', predCat: 'esports', emoji: '🕹', formats: 'sports' },
-    { category: 'sports', qInTitle: 'UFC%20OR%20MMA%20OR%20fight%20card%20OR%20weigh-in%20OR%20title%20bout', predCat: 'combat_news', emoji: '🥊', formats: 'combat_news' },
-    { category: 'sports', qInTitle: 'tennis%20OR%20Australian%20Open%20OR%20final%20OR%20seed%20OR%20upset', predCat: 'tennis', emoji: '🎾', formats: 'tennis' },
     { category: 'top', q: null, predCat: 'trending', emoji: '🔥', formats: 'general', prioritydomain: 'top' },
+    { endpoint: 'crypto', coin: 'btc,eth,sol,doge', predCat: 'crypto', emoji: '₿', formats: 'crypto' },
   ],
 ];
 
